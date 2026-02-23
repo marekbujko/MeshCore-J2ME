@@ -1,9 +1,0 @@
-MIDlet-1: MeshCore, , MeshCore
-MIDlet-Permissions: javax.microedition.io.Connector.socket
-MIDlet-Vendor: Vendor
-MIDlet-Version: 1.0
-MIDlet-Name: MeshCore Test
-Nokia-UI-Enhancement: IgnoreProfilesBasedSoundMuting,MusicKeysSupported
-Nokia-MIDlet-S60-Selection-Key-Compatibility: true
-MicroEdition-Configuration: CLDC-1.1
-MicroEdition-Profile: MIDP-2.1
