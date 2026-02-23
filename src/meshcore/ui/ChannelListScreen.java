@@ -5,12 +5,14 @@ import javax.microedition.lcdui.AlertType;
 import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.CommandListener;
 import javax.microedition.lcdui.Displayable;
+import javax.microedition.lcdui.Form;
 import javax.microedition.lcdui.List;
 import javax.microedition.lcdui.TextBox;
+import javax.microedition.lcdui.TextField;
 import java.util.Vector;
 
 /**
- * Channel list: Public (default) + custom channels. Add/Remove.
+ * Channel list: Public (default) + custom channels. Join Hashtag / Join Private / Remove.
  */
 public class ChannelListScreen extends List implements CommandListener {
 
@@ -18,7 +20,8 @@ public class ChannelListScreen extends List implements CommandListener {
 
     private final AppController app;
     private final Vector channelNames;
-    private final Command cmdAdd;
+    private final Command cmdJoinHashtag;
+    private final Command cmdJoinPrivate;
     private final Command cmdRemove;
     private final Command cmdBack;
 
@@ -27,13 +30,24 @@ public class ChannelListScreen extends List implements CommandListener {
         this.app = app;
         this.channelNames = channelNames;
         refreshList();
-        cmdAdd = new Command("Add", Command.SCREEN, 1);
-        cmdRemove = new Command("Remove", Command.SCREEN, 2);
-        cmdBack = new Command("Back", Command.BACK, 3);
-        addCommand(cmdAdd);
+        cmdJoinHashtag = new Command("Join Hashtag Channel", Command.SCREEN, 1);
+        cmdJoinPrivate = new Command("Join Private Channel", Command.SCREEN, 2);
+        cmdRemove = new Command("Remove", Command.SCREEN, 3);
+        cmdBack = new Command("Back", Command.BACK, 4);
+        addCommand(cmdJoinHashtag);
+        addCommand(cmdJoinPrivate);
         addCommand(cmdRemove);
         addCommand(cmdBack);
         setCommandListener(this);
+    }
+
+    private static String trimAll(String s) {
+        StringBuffer sb = new StringBuffer();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c != ' ' && c != '\t') sb.append(c);
+        }
+        return sb.toString();
     }
 
     public void refreshList() {
@@ -48,8 +62,8 @@ public class ChannelListScreen extends List implements CommandListener {
             app.showMainMenu();
             return;
         }
-        if (c == cmdAdd) {
-            final TextBox tb = new TextBox("New channel", "", 32, 0);
+        if (c == cmdJoinHashtag) {
+            final TextBox tb = new TextBox("Join Hashtag Channel", "", 32, 0);
             tb.addCommand(new Command("OK", Command.OK, 1));
             tb.addCommand(new Command("Cancel", Command.CANCEL, 2));
             tb.setCommandListener(new CommandListener() {
@@ -65,6 +79,34 @@ public class ChannelListScreen extends List implements CommandListener {
                 }
             });
             app.getDisplay().setCurrent(tb);
+            return;
+        }
+        if (c == cmdJoinPrivate) {
+            final Form form = new Form("Join Private Channel");
+            final TextField tfName = new TextField("Channel name", "", 32, TextField.ANY);
+            final TextField tfSecret = new TextField("Secret (32 hex)", "", 32, TextField.ANY);
+            form.append(tfName);
+            form.append(tfSecret);
+            form.addCommand(new Command("OK", Command.OK, 1));
+            form.addCommand(new Command("Cancel", Command.CANCEL, 2));
+            form.setCommandListener(new CommandListener() {
+                public void commandAction(Command cmd, Displayable disp) {
+                    if (cmd.getCommandType() == Command.OK) {
+                        String name = tfName.getString().trim();
+                        String secret = trimAll(tfSecret.getString().trim());
+                        if (name.length() > 0 && secret.length() == 32) {
+                            app.addPrivateChannel(name, secret);
+                        } else if (secret.length() != 32) {
+                            Alert a = new Alert("", "Secret must be 32 hex chars", null, AlertType.WARNING);
+                            a.setTimeout(2500);
+                            app.getDisplay().setCurrent(a, ChannelListScreen.this);
+                            return;
+                        }
+                    }
+                    app.showChannelListScreen();
+                }
+            });
+            app.getDisplay().setCurrent(form);
             return;
         }
         if (c == cmdRemove) {

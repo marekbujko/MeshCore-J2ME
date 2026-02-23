@@ -35,4 +35,26 @@ public final class FrameUtils {
         }
         return sb.toString();
     }
+
+    /** Parse hex string to bytes. Returns null if invalid. Expects even length (2 chars = 1 byte). */
+    public static byte[] hexDecode(String hex) {
+        if (hex == null) return null;
+        hex = hex.trim().toLowerCase();
+        int len = hex.length();
+        if (len % 2 != 0 || len == 0) return null;
+        byte[] out = new byte[len / 2];
+        for (int i = 0; i < out.length; i++) {
+            int hi = hexChar(hex.charAt(i * 2));
+            int lo = hexChar(hex.charAt(i * 2 + 1));
+            if (hi < 0 || lo < 0) return null;
+            out[i] = (byte) ((hi << 4) | lo);
+        }
+        return out;
+    }
+
+    private static int hexChar(char c) {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        return -1;
+    }
 }

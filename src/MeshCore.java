@@ -9,6 +9,7 @@ import meshcore.protocol.FrameHandlerListener;
 import meshcore.protocol.ProtocolConstants;
 import meshcore.net.FrameTransport;
 import meshcore.util.ChannelStorage;
+import meshcore.util.FrameUtils;
 import meshcore.util.ParseUtils;
 import meshcore.util.SHA256;
 import meshcore.ui.AppController;
@@ -93,6 +94,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         channelNames.addElement(ChannelListScreen.PUBLIC_CHANNEL);
         channelBuffers.addElement(new StringBuffer());
         Vector custom = ChannelStorage.load();
+        lastSavedCustom = copyVector(custom);
         for (int i = 0; i < custom.size(); i++) {
             channelNames.addElement(custom.elementAt(i));
             channelBuffers.addElement(new StringBuffer());
@@ -137,6 +139,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void addChannel(String name) {
+        addChannel(name, null);
+    }
+
+    public void addChannel(String name, byte[] secretBytes) {
         for (int i = 0; i < channelNames.size(); i++) {
             if (name.equalsIgnoreCase((String) channelNames.elementAt(i))) {
                 return;
@@ -145,7 +151,16 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         channelNames.addElement(name);
         channelBuffers.addElement(new StringBuffer());
         saveCustomChannels();
-        sendSetChannel(channelNames.size() - 1, name);
+        sendSetChannel(channelNames.size() - 1, name, secretBytes);
+    }
+
+    public void addPrivateChannel(String name, String secretHex) {
+        byte[] secret = FrameUtils.hexDecode(secretHex);
+        if (secret == null || secret.length != 16) {
+            appendActivityLog("[!] Secret must be 32 hex chars (16 bytes)");
+            return;
+        }
+        addChannel(name, secret);
     }
 
     public void removeChannel(int index) {
@@ -155,12 +170,56 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         saveCustomChannels();
     }
 
+    private Vector lastSavedCustom;
+
     private void saveCustomChannels() {
+        saveCustomChannels(true);
+    }
+
+    private void saveCustomChannels(boolean immediate) {
         Vector custom = new Vector();
         for (int i = 1; i < channelNames.size(); i++) {
             custom.addElement(channelNames.elementAt(i));
         }
+        if (lastSavedCustom != null && vectorsEqual(lastSavedCustom, custom)) return;
+        lastSavedCustom = copyVector(custom);
         ChannelStorage.save(custom);
+    }
+
+    private static boolean vectorsEqual(Vector a, Vector b) {
+        if (a.size() != b.size()) return false;
+        for (int i = 0; i < a.size(); i++) {
+            if (!eq(a.elementAt(i), b.elementAt(i))) return false;
+        }
+        return true;
+    }
+
+    private static boolean eq(Object a, Object b) {
+        return (a == null && b == null) || (a != null && a.equals(b));
+    }
+
+    private static Vector copyVector(Vector v) {
+        Vector c = new Vector(v.size());
+        for (int i = 0; i < v.size(); i++) c.addElement(v.elementAt(i));
+        return c;
+    }
+
+    private volatile Thread debounceSaveThread;
+
+    private void scheduleDebouncedSave() {
+        if (debounceSaveThread != null && debounceSaveThread.isAlive()) return;
+        debounceSaveThread = new Thread(new Runnable() {
+            public void run() {
+                try { Thread.sleep(450); } catch (InterruptedException e) { return; }
+                debounceSaveThread = null;
+                display.callSerially(new Runnable() {
+                    public void run() {
+                        saveCustomChannels(false);
+                    }
+                });
+            }
+        });
+        debounceSaveThread.start();
     }
 
     public void showContactsScreen() {
@@ -311,6 +370,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void sendSetChannel(int channelIndex, String name) {
+        sendSetChannel(channelIndex, name, null);
+    }
+
+    public void sendSetChannel(int channelIndex, String name, byte[] secretBytes) {
         try {
             byte[] nb = name.getBytes("UTF-8");
             if (nb.length > 32) {
@@ -320,7 +383,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             }
             byte[] name32 = new byte[32];
             System.arraycopy(nb, 0, name32, 0, nb.length);
-            byte[] secret = SHA256.channelSecret(name);
+            byte[] secret = (secretBytes != null && secretBytes.length == 16)
+                ? secretBytes : SHA256.channelSecret(name);
             byte[] f = new byte[2 + 32 + 16];
             f[0] = (byte) ProtocolConstants.CMD_SET_CHANNEL;
             f[1] = (byte) (channelIndex & 0xFF);
@@ -526,7 +590,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 }
                 channelNames.setElementAt(name, chIdx);
                 if (chIdx >= 1) {
-                    saveCustomChannels();
+                    scheduleDebouncedSave();
                 }
             }
         });

@@ -15,6 +15,7 @@ public interface AppController {
     void showChannelListScreen();
     void showChannelScreen(int channelIndex);
     void addChannel(String name);
+    void addPrivateChannel(String name, String secretHex);
     void removeChannel(int index);
     void showContactsScreen();
     void showDMScreen(int idx);
