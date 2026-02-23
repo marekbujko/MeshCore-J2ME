@@ -10,6 +10,7 @@ import meshcore.protocol.ProtocolConstants;
 import meshcore.net.FrameTransport;
 import meshcore.util.ChannelStorage;
 import meshcore.util.ParseUtils;
+import meshcore.util.SHA256;
 import meshcore.ui.AppController;
 import meshcore.ui.ActivityLogScreen;
 import meshcore.ui.ChannelListScreen;
@@ -144,6 +145,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         channelNames.addElement(name);
         channelBuffers.addElement(new StringBuffer());
         saveCustomChannels();
+        sendSetChannel(channelNames.size() - 1, name);
     }
 
     public void removeChannel(int index) {
@@ -220,6 +222,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             transport.sendFrame(st);
 
             sendGetContacts();
+            sendGetChannels();
 
             running = true;
             new Thread(new Runnable() {
@@ -291,6 +294,41 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_GET_CONTACTS});
         } catch (IOException e) {
             appendActivityLog("[!] Sync failed");
+        }
+    }
+
+    public void sendGetChannels() {
+        try {
+            for (int i = 0; i < 8; i++) {
+                transport.sendFrame(new byte[]{
+                    (byte) ProtocolConstants.CMD_GET_CHANNEL,
+                    (byte) (i & 0xFF)
+                });
+            }
+        } catch (IOException e) {
+            appendActivityLog("[!] Get channels failed");
+        }
+    }
+
+    public void sendSetChannel(int channelIndex, String name) {
+        try {
+            byte[] nb = name.getBytes("UTF-8");
+            if (nb.length > 32) {
+                byte[] trimmed = new byte[32];
+                System.arraycopy(nb, 0, trimmed, 0, 32);
+                nb = trimmed;
+            }
+            byte[] name32 = new byte[32];
+            System.arraycopy(nb, 0, name32, 0, nb.length);
+            byte[] secret = SHA256.channelSecret(name);
+            byte[] f = new byte[2 + 32 + 16];
+            f[0] = (byte) ProtocolConstants.CMD_SET_CHANNEL;
+            f[1] = (byte) (channelIndex & 0xFF);
+            System.arraycopy(name32, 0, f, 2, 32);
+            System.arraycopy(secret, 0, f, 34, 16);
+            transport.sendFrame(f);
+        } catch (Exception e) {
+            appendActivityLog("[!] Set channel failed");
         }
     }
 
@@ -474,6 +512,21 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             public void run() {
                 if (display.getCurrent() == contactsScreen) {
                     showContactsScreen();
+                }
+            }
+        });
+    }
+
+    public void onChannelInfo(final int chIdx, final String name) {
+        display.callSerially(new Runnable() {
+            public void run() {
+                while (channelNames.size() <= chIdx) {
+                    channelNames.addElement(chIdx == 0 ? ChannelListScreen.PUBLIC_CHANNEL : "");
+                    channelBuffers.addElement(new StringBuffer());
+                }
+                channelNames.setElementAt(name, chIdx);
+                if (chIdx >= 1) {
+                    saveCustomChannels();
                 }
             }
         });

@@ -13,6 +13,7 @@ public interface FrameHandlerListener {
 
     void onDeviceInfo(String firmwareVer);
     void onSelfInfo(String nodeName, int txPwr, long freq, long bw, int sf, int cr);
+    void onChannelInfo(int channelIndex, String name);
     void onContactsEnd();
     void onStats(String title, String content);
     void onDeviceTime(String content);

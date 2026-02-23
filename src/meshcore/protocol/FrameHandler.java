@@ -56,6 +56,8 @@ public final class FrameHandler {
             handleDeviceTime(f);
         } else if (code == ProtocolConstants.RESP_STATS) {
             handleStats(f);
+        } else if (code == ProtocolConstants.RESP_CHANNEL_INFO) {
+            handleChannelInfo(f);
         } else if (code == ProtocolConstants.RESP_ERR) {
             if (f.length > 1) listener.onError(f[1] & 0xFF);
         }
@@ -136,6 +138,15 @@ public final class FrameHandler {
             long uptime = FrameTransport.readUint32LE(f, 4);
             int queueLen = f[10] & 0xFF;
             listener.onStats("Stats", "Batt: " + batt + "mV\nUptime: " + uptime + "s\nQueue: " + queueLen);
+        }
+    }
+
+    private void handleChannelInfo(byte[] f) {
+        if (f.length < 34) return;
+        int chIdx = f[1] & 0xFF;
+        String name = FrameUtils.extractString(f, 2, 32);
+        if (name != null && name.length() > 0) {
+            listener.onChannelInfo(chIdx, name);
         }
     }
 

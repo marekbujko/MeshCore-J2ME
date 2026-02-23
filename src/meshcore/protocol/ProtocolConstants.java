@@ -20,6 +20,8 @@ public final class ProtocolConstants {
     public static final int CMD_SET_RADIO_PARAMS  = 11;
     public static final int CMD_SET_RADIO_TX_PWR  = 12;
     public static final int CMD_REMOVE_CONTACT    = 15;
+    public static final int CMD_GET_CHANNEL       = 31;
+    public static final int CMD_SET_CHANNEL       = 32;
     public static final int CMD_GET_BATT_STORAGE  = 20;
     public static final int CMD_GET_STATS         = 56;
     public static final int CMD_DEVICE_QUERY      = 22;
@@ -40,6 +42,7 @@ public final class ProtocolConstants {
     public static final int RESP_DEVICE_INFO     = 13;
     public static final int RESP_CURR_TIME       = 9;
     public static final int RESP_STATS           = 24;
+    public static final int RESP_CHANNEL_INFO    = 18;
     public static final int RESP_CONTACT_MSG_V3  = 16;
     public static final int RESP_CHANNEL_MSG_V3   = 17;
 
