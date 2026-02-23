@@ -1,0 +1,23 @@
+# Build output
+/build/
+/dist/
+
+# NetBeans project files
+/nbproject/private/
+
+
+# Optional: ignore entire nbproject (uncomment if desired)
+# /nbproject/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
