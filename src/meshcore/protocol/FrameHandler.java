@@ -30,6 +30,7 @@ public final class FrameHandler {
         } else if (code == ProtocolConstants.RESP_CONTACTS_START) {
             contactNames.removeAllElements();
             contactKeys.removeAllElements();
+            listener.onContactsStart();
         } else if (code == ProtocolConstants.RESP_CONTACT) {
             handleContact(f);
         } else if (code == ProtocolConstants.RESP_END_CONTACTS) {
@@ -65,19 +66,33 @@ public final class FrameHandler {
 
     private void handleDeviceInfo(byte[] f) {
         String ver = "";
-        if (f.length >= 2) ver = "fw" + (f[1] & 0xFF);
-        if (f.length >= 17) ver += " " + FrameUtils.extractString(f, 5, 12).trim();
+        if (f.length >= 2) {
+            int fwVer = f[1] & 0xFF;
+            if (f.length >= 80) {
+                String verStr = FrameUtils.extractString(f, 60, 20).trim();
+                if (verStr.length() > 0) {
+                    ver = verStr;
+                } else {
+                    ver = "fw" + fwVer;
+                }
+            } else if (f.length >= 20) {
+                String fwBuild = FrameUtils.extractString(f, 8, 12).trim();
+                ver = "fw" + fwVer + (fwBuild.length() > 0 ? " " + fwBuild : "");
+            } else {
+                ver = "fw" + fwVer;
+            }
+        }
         listener.onDeviceInfo(ver);
     }
 
     private void handleSelfInfo(byte[] f) {
-        int txPwr = f.length > 4 ? f[2] & 0xFF : 0;
-        long freq = f.length > 52 ? FrameTransport.readUint32LE(f, 40) : 0;
-        long bw = f.length > 52 ? FrameTransport.readUint32LE(f, 44) : 0;
-        int sf = f.length > 52 ? f[48] & 0xFF : 0;
-        int cr = f.length > 52 ? f[49] & 0xFF : 0;
-        String name = f.length > 50 ? FrameUtils.extractVarchar(f, 50) : "";
-        listener.onSelfInfo(name, txPwr, freq, bw, sf, cr);
+        int txPwr = f.length > 3 ? f[2] & 0xFF : 0;
+        long freqRaw = f.length > 55 ? FrameTransport.readUint32LE(f, 48) : 0;
+        long bwRaw = f.length > 59 ? FrameTransport.readUint32LE(f, 52) : 0;
+        int sf = f.length > 56 ? f[56] & 0xFF : 0;
+        int cr = f.length > 57 ? f[57] & 0xFF : 0;
+        String name = f.length > 58 ? FrameUtils.extractVarchar(f, 58) : "";
+        listener.onSelfInfo(name, txPwr, freqRaw, bwRaw, sf, cr);
     }
 
     private void handleContact(byte[] f) {
@@ -98,17 +113,22 @@ public final class FrameHandler {
 
     private void handleChannelMessage(byte[] f, int code) {
         int chIdx = (code == ProtocolConstants.RESP_CHANNEL_MSG_V3) ? (f[4] & 0xFF) : (f[1] & 0xFF);
-        int off = (code == ProtocolConstants.RESP_CHANNEL_MSG_V3) ? 10 : 7;
+        int off = (code == ProtocolConstants.RESP_CHANNEL_MSG_V3) ? 11 : 8;
         listener.appendChannel(chIdx, "[CH] " + FrameUtils.extractVarchar(f, off));
         listener.trySyncMessages();
     }
 
     private void handleContactMessage(byte[] f, int code) {
         int pkOff = (code == ProtocolConstants.RESP_CONTACT_MSG_V3) ? 4 : 1;
-        int textOff = (code == ProtocolConstants.RESP_CONTACT_MSG_V3) ? 13 : 9;
-        String sender = findContactByPrefix(f, pkOff);
+        int txtTypeOff = (code == ProtocolConstants.RESP_CONTACT_MSG_V3) ? 11 : 8;
+        int textOff = (code == ProtocolConstants.RESP_CONTACT_MSG_V3) ? 16 : 13;
+        if (f.length > txtTypeOff && (f[txtTypeOff] & 0xFF) == 2) {
+            textOff += 4;
+        }
+        int idx = findContactIndexByPrefix(f, pkOff);
+        String sender = (idx >= 0) ? (String) contactNames.elementAt(idx) : FrameUtils.bytesToHex(f, pkOff, 3);
         String text = FrameUtils.extractVarchar(f, textOff);
-        listener.appendDM("[" + sender + "] " + text);
+        listener.appendDM(idx, "[" + sender + "] " + text);
         listener.appendActivityLog("[DM from " + sender + "]");
         listener.trySyncMessages();
     }
@@ -151,6 +171,11 @@ public final class FrameHandler {
     }
 
     private String findContactByPrefix(byte[] frame, int off) {
+        int idx = findContactIndexByPrefix(frame, off);
+        return (idx >= 0) ? (String) contactNames.elementAt(idx) : FrameUtils.bytesToHex(frame, off, 3);
+    }
+
+    private int findContactIndexByPrefix(byte[] frame, int off) {
         for (int i = 0; i < contactKeys.size(); i++) {
             byte[] key = (byte[]) contactKeys.elementAt(i);
             boolean match = true;
@@ -160,8 +185,8 @@ public final class FrameHandler {
                     break;
                 }
             }
-            if (match) return (String) contactNames.elementAt(i);
+            if (match) return i;
         }
-        return FrameUtils.bytesToHex(frame, off, 3);
+        return -1;
     }
 }

@@ -30,6 +30,7 @@ public interface AppController {
     void removeContact(int idx);
     void saveSettings();
     void sendGetBattery();
+    void sendRefreshSettings();
     void sendGetStats();
     void sendGetDeviceTime();
     void sendAdvert();
@@ -37,5 +38,5 @@ public interface AppController {
 
     void appendChannel(int channelIndex, String line);
     void appendActivityLog(String line);
-    void appendDM(String line);
+    void appendDM(int contactIdx, String line);
 }

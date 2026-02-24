@@ -1,5 +1,6 @@
 package meshcore.ui;
 
+import meshcore.util.ConnectStorage;
 import meshcore.util.ParseUtils;
 
 import javax.microedition.lcdui.Command;
@@ -21,8 +22,8 @@ public class ConnectScreen extends Form implements CommandListener {
     public ConnectScreen(AppController app) {
         super("MeshCore");
         this.app = app;
-        tfHost = new TextField("ESP32 IP:", "192.168.4.1", 40, TextField.ANY);
-        tfPort = new TextField("Port:", "5000", 6, TextField.NUMERIC);
+        tfHost = new TextField("ESP32 IP:", ConnectStorage.loadHost(), 40, TextField.ANY);
+        tfPort = new TextField("Port:", ConnectStorage.loadPort(), 6, TextField.NUMERIC);
         append(tfHost);
         append(tfPort);
         cmdConnect = new Command("Connect", Command.OK, 1);

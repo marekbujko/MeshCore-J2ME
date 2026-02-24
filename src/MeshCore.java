@@ -9,6 +9,7 @@ import meshcore.protocol.FrameHandlerListener;
 import meshcore.protocol.ProtocolConstants;
 import meshcore.net.FrameTransport;
 import meshcore.util.ChannelStorage;
+import meshcore.util.ConnectStorage;
 import meshcore.util.FrameUtils;
 import meshcore.util.ParseUtils;
 import meshcore.util.SHA256;
@@ -54,14 +55,16 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     private Vector channelNames = new Vector();
     private Vector channelBuffers = new Vector();
+    private Vector channelUnreadCount = new Vector();
     private StringBuffer activityLogBuf = new StringBuffer();
-    private StringBuffer dmBuf = new StringBuffer();
+    private Vector dmBuffers = new Vector();
+    private Vector contactUnreadCount = new Vector();
 
     private Vector contactNames = new Vector();
     private Vector contactKeys = new Vector();
 
-    private long nodeFreq = 915000000L;
-    private long nodeBw = 250000L;
+    private long nodeFreq = 915000L;
+    private long nodeBw = 250L;
     private int nodeSf = 10;
     private int nodeCr = 5;
     private int nodeTxPwr = 20;
@@ -91,13 +94,16 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private void initChannels() {
         channelNames.removeAllElements();
         channelBuffers.removeAllElements();
+        channelUnreadCount.removeAllElements();
         channelNames.addElement(ChannelListScreen.PUBLIC_CHANNEL);
         channelBuffers.addElement(new StringBuffer());
+        channelUnreadCount.addElement(new Integer(0));
         Vector custom = ChannelStorage.load();
         lastSavedCustom = copyVector(custom);
         for (int i = 0; i < custom.size(); i++) {
             channelNames.addElement(custom.elementAt(i));
             channelBuffers.addElement(new StringBuffer());
+            channelUnreadCount.addElement(new Integer(0));
         }
     }
 
@@ -125,12 +131,13 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void showChannelListScreen() {
-        channelListScreen = new ChannelListScreen(this, channelNames);
+        channelListScreen = new ChannelListScreen(this, channelNames, channelUnreadCount);
         display.setCurrent(channelListScreen);
     }
 
     public void showChannelScreen(int channelIndex) {
         if (channelIndex < 0 || channelIndex >= channelBuffers.size()) return;
+        setChannelUnread(channelIndex, 0);
         String name = (String) channelNames.elementAt(channelIndex);
         StringBuffer buf = (StringBuffer) channelBuffers.elementAt(channelIndex);
         channelScreen = new ChannelScreen(this, channelIndex, name, buf);
@@ -150,6 +157,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         }
         channelNames.addElement(name);
         channelBuffers.addElement(new StringBuffer());
+        channelUnreadCount.addElement(new Integer(0));
         saveCustomChannels();
         sendSetChannel(channelNames.size() - 1, name, secretBytes);
     }
@@ -167,6 +175,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         if (index <= 0 || index >= channelNames.size()) return;
         channelNames.removeElementAt(index);
         channelBuffers.removeElementAt(index);
+        channelUnreadCount.removeElementAt(index);
         saveCustomChannels();
     }
 
@@ -223,14 +232,18 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void showContactsScreen() {
-        contactsScreen = new ContactsScreen(this, contactNames);
+        ensureContactUnreadSize(contactNames.size());
+        contactsScreen = new ContactsScreen(this, contactNames, contactUnreadCount);
         display.setCurrent(contactsScreen);
     }
 
     public void showDMScreen(int idx) {
-        dmBuf.delete(0, dmBuf.length());
+        ensureDmBuffersSize(contactNames.size());
+        ensureContactUnreadSize(contactNames.size());
+        setContactUnread(idx, 0);
         String name = (String) contactNames.elementAt(idx);
-        dmScreen = new DMScreen(this, idx, name, dmBuf);
+        StringBuffer buf = (StringBuffer) dmBuffers.elementAt(idx);
+        dmScreen = new DMScreen(this, idx, name, buf);
         display.setCurrent(dmScreen);
         trySyncMessages();
     }
@@ -260,6 +273,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             conn = (StreamConnection) Connector.open("socket://" + host + ":" + port);
             transport = new FrameTransport(conn.openInputStream(), conn.openOutputStream());
             connected = true;
+            ConnectStorage.save(host, String.valueOf(port));
             setConnectTitle("Connected!");
             appendActivityLog("[*] Connected");
 
@@ -342,9 +356,9 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             System.arraycopy(key, 0, f, 7, 6);
             System.arraycopy(tb, 0, f, 13, tb.length);
             transport.sendFrame(f);
-            appendDM("[me] " + msg);
+            appendDM(idx, "[me] " + msg);
         } catch (IOException e) {
-            appendDM("[!] Send error");
+            appendDM(idx, "[!] Send error");
         }
     }
 
@@ -410,6 +424,22 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         }
     }
 
+    public void sendRefreshSettings() {
+        try {
+            transport.sendFrame(new byte[]{
+                (byte) ProtocolConstants.CMD_DEVICE_QUERY,
+                (byte) ProtocolConstants.APP_VER
+            });
+            byte[] nb = myName.getBytes("UTF-8");
+            byte[] as = new byte[2 + 6 + nb.length];
+            as[0] = (byte) ProtocolConstants.CMD_APP_START;
+            as[1] = (byte) ProtocolConstants.APP_VER;
+            System.arraycopy(nb, 0, as, 8, nb.length);
+            transport.sendFrame(as);
+            transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_GET_BATT_STORAGE});
+        } catch (IOException ignore) {}
+    }
+
     public void sendGetBattery() {
         try {
             transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_GET_BATT_STORAGE});
@@ -462,8 +492,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 transport.sendFrame(f);
                 nodeName = newName;
             }
-            nodeFreq = ParseUtils.parseLong(settingsScreen.getFreq(), nodeFreq);
-            nodeBw = ParseUtils.parseLong(settingsScreen.getBw(), nodeBw);
+            nodeFreq = ParseUtils.parseFreqBw(settingsScreen.getFreq(), nodeFreq);
+            nodeBw = ParseUtils.parseFreqBw(settingsScreen.getBw(), nodeBw);
             nodeSf = ParseUtils.parseInt(settingsScreen.getSf(), nodeSf);
             nodeCr = ParseUtils.parseInt(settingsScreen.getCr(), nodeCr);
             nodeTxPwr = ParseUtils.parseInt(settingsScreen.getTxPwr(), nodeTxPwr);
@@ -478,6 +508,15 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
             transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_SET_RADIO_TX_PWR, (byte) nodeTxPwr});
             appendActivityLog("[*] Settings saved");
+            final SettingsScreen set = settingsScreen;
+            display.callSerially(new Runnable() {
+                public void run() {
+                    if (set != null) {
+                        set.setNodeInfo(nodeName, firmwareVer);
+                        set.showInfo("Settings saved", "Settings have been updated.");
+                    }
+                }
+            });
         } catch (IOException e) {
             appendActivityLog("[!] Save error: " + e.getMessage());
         }
@@ -493,9 +532,16 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         }
         final ChannelScreen ch = channelScreen;
         final int chIdx = idx;
+        final String chName = idx < channelNames.size() ? (String) channelNames.elementAt(idx) : "#" + idx;
         display.callSerially(new Runnable() {
             public void run() {
-                if (ch != null && ch.getChannelIndex() == chIdx) ch.refreshLog();
+                if (ch != null && display.getCurrent() == ch && ch.getChannelIndex() == chIdx) {
+                    ch.refreshLog();
+                } else {
+                    incChannelUnread(chIdx);
+                    refreshChannelListIfShown();
+                    showIncomingNotification("New message in " + chName);
+                }
             }
         });
     }
@@ -513,17 +559,112 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         });
     }
 
-    public void appendDM(final String line) {
-        dmBuf.append(line).append("\n");
-        if (dmBuf.length() > 2000) {
-            dmBuf.delete(0, dmBuf.length() - 2000);
+    public void appendDM(final int contactIdx, final String line) {
+        if (contactIdx < 0) return;
+        ensureDmBuffersSize(contactIdx + 1);
+        StringBuffer buf = (StringBuffer) dmBuffers.elementAt(contactIdx);
+        buf.append(line).append("\n");
+        if (buf.length() > 2000) {
+            buf.delete(0, buf.length() - 2000);
         }
         final DMScreen dm = dmScreen;
+        final int cIdx = contactIdx;
         display.callSerially(new Runnable() {
             public void run() {
-                if (dm != null) dm.refreshLog();
+                if (dm != null && display.getCurrent() == dm && dm.getContactIdx() == cIdx) {
+                    dm.refreshLog();
+                } else {
+                    incContactUnread(cIdx);
+                    refreshContactsListIfShown();
+                    String from = extractDMSender(line);
+                    showIncomingNotification("New DM" + (from.length() > 0 ? " from " + from : ""));
+                }
             }
         });
+    }
+
+    private void ensureDmBuffersSize(int size) {
+        while (dmBuffers.size() < size) {
+            dmBuffers.addElement(new StringBuffer());
+        }
+    }
+
+    private void ensureChannelUnreadSize(int size) {
+        while (channelUnreadCount.size() < size) {
+            channelUnreadCount.addElement(new Integer(0));
+        }
+    }
+
+    private void ensureContactUnreadSize(int size) {
+        while (contactUnreadCount.size() < size) {
+            contactUnreadCount.addElement(new Integer(0));
+        }
+    }
+
+    private void incChannelUnread(int idx) {
+        ensureChannelUnreadSize(idx + 1);
+        int n = ((Integer) channelUnreadCount.elementAt(idx)).intValue();
+        channelUnreadCount.setElementAt(new Integer(n + 1), idx);
+    }
+
+    private void setChannelUnread(int idx, int val) {
+        ensureChannelUnreadSize(idx + 1);
+        channelUnreadCount.setElementAt(new Integer(val), idx);
+    }
+
+    private void incContactUnread(int idx) {
+        ensureContactUnreadSize(idx + 1);
+        int n = ((Integer) contactUnreadCount.elementAt(idx)).intValue();
+        contactUnreadCount.setElementAt(new Integer(n + 1), idx);
+    }
+
+    private void setContactUnread(int idx, int val) {
+        ensureContactUnreadSize(idx + 1);
+        contactUnreadCount.setElementAt(new Integer(val), idx);
+    }
+
+    private void refreshChannelListIfShown() {
+        final ChannelListScreen list = channelListScreen;
+        if (list != null && display.getCurrent() == list) {
+            list.refreshList();
+        }
+    }
+
+    private void refreshContactsListIfShown() {
+        final ContactsScreen list = contactsScreen;
+        if (list != null && display.getCurrent() == list) {
+            list.refreshList();
+        }
+    }
+
+    private static String extractDMSender(String line) {
+        int s = line.indexOf('[');
+        int e = (s >= 0) ? line.indexOf(']', s) : -1;
+        return (s >= 0 && e > s) ? line.substring(s + 1, e) : "";
+    }
+
+    private void showIncomingNotification(String message) {
+        Displayable current = display.getCurrent();
+        if (current == null) return;
+        try {
+            String safe = sanitizeAlertMessage(message, 60);
+            Alert a = new Alert("Message", safe, null, AlertType.INFO);
+            a.setTimeout(2000);
+            display.setCurrent(a, current);
+        } catch (Exception e) {
+            /* Nokia S40 can throw on Alert with empty/long/special chars */
+        }
+    }
+
+    private static String sanitizeAlertMessage(String s, int maxLen) {
+        if (s == null || s.length() == 0) return "New message";
+        StringBuffer sb = new StringBuffer();
+        int len = Math.min(s.length(), maxLen);
+        for (int i = 0; i < len; i++) {
+            char c = s.charAt(i);
+            if (c >= 32 && c < 127) sb.append(c);
+        }
+        return sb.length() > 0 ? sb.toString() : "New message";
     }
 
     private void setConnectTitle(final String t) {
@@ -558,6 +699,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void onDeviceInfo(String ver) {
         firmwareVer = ver;
         appendActivityLog("[*] " + firmwareVer);
+        refreshSettingsNodeIfShown();
     }
 
     public void onSelfInfo(String name, int txPwr, long freq, long bw, int sf, int cr) {
@@ -568,7 +710,23 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         nodeSf = sf;
         nodeCr = cr;
         appendActivityLog("[*] Node: " + nodeName);
+        refreshSettingsNodeIfShown();
         trySyncMessages();
+    }
+
+    private void refreshSettingsNodeIfShown() {
+        final SettingsScreen set = settingsScreen;
+        if (set == null) return;
+        display.callSerially(new Runnable() {
+            public void run() {
+                if (display.getCurrent() == set) {
+                    set.setNodeInfo(nodeName, firmwareVer);
+                }
+            }
+        });
+    }
+
+    public void onContactsStart() {
     }
 
     public void onContactsEnd() {
@@ -587,8 +745,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 while (channelNames.size() <= chIdx) {
                     channelNames.addElement(chIdx == 0 ? ChannelListScreen.PUBLIC_CHANNEL : "");
                     channelBuffers.addElement(new StringBuffer());
+                    channelUnreadCount.addElement(new Integer(0));
                 }
                 channelNames.setElementAt(name, chIdx);
+                ensureChannelUnreadSize(channelNames.size());
                 if (chIdx >= 1) {
                     scheduleDebouncedSave();
                 }

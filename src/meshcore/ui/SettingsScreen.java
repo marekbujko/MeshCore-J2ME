@@ -20,6 +20,7 @@ public class SettingsScreen extends Form implements CommandListener {
     private final TextField tfSf;
     private final TextField tfCr;
     private final TextField tfTxPwr;
+    private final StringItem nodeInfoItem;
     private final StringItem battInfo;
     private final Command cmdSave;
     private final Command cmdRefresh;
@@ -32,26 +33,31 @@ public class SettingsScreen extends Form implements CommandListener {
             long nodeFreq, long nodeBw, int nodeSf, int nodeCr, int nodeTxPwr) {
         super("Settings");
         this.app = app;
-        append(new StringItem("Node:", nodeName + " " + firmwareVer));
-        tfNodeName = new TextField("Name:", nodeName, 20, TextField.ANY);
-        tfFreq = new TextField("Freq Hz:", String.valueOf(nodeFreq), 12, TextField.NUMERIC);
-        tfBw = new TextField("BW Hz:", String.valueOf(nodeBw), 12, TextField.NUMERIC);
-        tfSf = new TextField("SF:", String.valueOf(nodeSf), 3, TextField.NUMERIC);
-        tfCr = new TextField("CR:", String.valueOf(nodeCr), 3, TextField.NUMERIC);
-        tfTxPwr = new TextField("TX dBm:", String.valueOf(nodeTxPwr), 3, TextField.NUMERIC);
-        battInfo = new StringItem("Battery:", "Press Refresh");
-        append(tfNodeName);
-        append(tfFreq);
-        append(tfBw);
-        append(tfSf);
-        append(tfCr);
-        append(tfTxPwr);
+        String nn = (nodeName != null ? nodeName : "");
+        String fw = (firmwareVer != null ? firmwareVer : "");
+        String nameInit = sanitizeForTextField(nn, 20);
+        if (nameInit.length() == 0) nameInit = "Node0";
+        nodeInfoItem = new StringItem("Node:", nn + " " + fw);
+        battInfo = new StringItem("Battery:", "Loading...");
+        append(nodeInfoItem);
         append(battInfo);
+        tfNodeName = new TextField("Name:", nameInit, 20, TextField.ANY);
+        append(tfNodeName);
+        tfFreq = new TextField("Freq MHz:", formatFreqBw(nodeFreq), 12, TextField.ANY);
+        append(tfFreq);
+        tfBw = new TextField("BW kHz:", formatFreqBw(nodeBw), 12, TextField.ANY);
+        append(tfBw);
+        tfSf = new TextField("SF:", String.valueOf(nodeSf), 3, TextField.ANY);
+        append(tfSf);
+        tfCr = new TextField("CR:", String.valueOf(nodeCr), 3, TextField.ANY);
+        append(tfCr);
+        tfTxPwr = new TextField("TX dBm:", String.valueOf(nodeTxPwr), 3, TextField.ANY);
+        append(tfTxPwr);
         cmdSave = new Command("Save", Command.OK, 1);
-        cmdRefresh = new Command("Refresh", Command.ITEM, 3);
-        cmdStats = new Command("Stats", Command.ITEM, 4);
-        cmdTime = new Command("Time", Command.ITEM, 5);
-        cmdAdvert = new Command("Advertise", Command.ITEM, 3);
+        cmdRefresh = new Command("Refresh", Command.SCREEN, 3);
+        cmdStats = new Command("Stats", Command.SCREEN, 4);
+        cmdTime = new Command("Time", Command.SCREEN, 5);
+        cmdAdvert = new Command("Advertise", Command.SCREEN, 3);
         cmdBack = new Command("Back", Command.BACK, 2);
         addCommand(cmdSave);
         addCommand(cmdRefresh);
@@ -60,6 +66,36 @@ public class SettingsScreen extends Form implements CommandListener {
         addCommand(cmdAdvert);
         addCommand(cmdBack);
         setCommandListener(this);
+    }
+
+    private static String sanitizeForTextField(String s, int maxLen) {
+        if (s == null) return "";
+        StringBuffer sb = new StringBuffer();
+        int len = Math.min(s.length(), maxLen);
+        for (int i = 0; i < len; i++) {
+            char c = s.charAt(i);
+            if (c >= 32 && c < 127) sb.append(c);
+        }
+        return sb.toString();
+    }
+
+    private static String formatFreqBw(long raw) {
+        if (raw < 0) raw = 0;
+        long whole = raw / 1000;
+        int frac = (int) (raw % 1000);
+        String f = (frac < 10) ? "00" : (frac < 100) ? "0" : "";
+        f += frac;
+        while (f.length() > 1 && f.charAt(f.length() - 1) == '0') {
+            f = f.substring(0, f.length() - 1);
+        }
+        String s = whole + "." + f;
+        return s.length() > 12 ? s.substring(0, 12) : s;
+    }
+
+    public void setNodeInfo(String nodeName, String firmwareVer) {
+        String nn = (nodeName != null ? nodeName : "");
+        String fw = (firmwareVer != null ? firmwareVer : "");
+        nodeInfoItem.setText(nn + " " + fw);
     }
 
     public void setBattInfo(String s) {
@@ -112,7 +148,7 @@ public class SettingsScreen extends Form implements CommandListener {
         if (c == cmdRefresh) {
             new Thread(new Runnable() {
                 public void run() {
-                    app.sendGetBattery();
+                    app.sendRefreshSettings();
                 }
             }).start();
             return;

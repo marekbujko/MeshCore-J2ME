@@ -20,15 +20,17 @@ public class ChannelListScreen extends List implements CommandListener {
 
     private final AppController app;
     private final Vector channelNames;
+    private final Vector channelUnreadCount;
     private final Command cmdJoinHashtag;
     private final Command cmdJoinPrivate;
     private final Command cmdRemove;
     private final Command cmdBack;
 
-    public ChannelListScreen(AppController app, Vector channelNames) {
+    public ChannelListScreen(AppController app, Vector channelNames, Vector channelUnreadCount) {
         super("Channels", List.IMPLICIT);
         this.app = app;
         this.channelNames = channelNames;
+        this.channelUnreadCount = channelUnreadCount;
         refreshList();
         cmdJoinHashtag = new Command("Join Hashtag Channel", Command.SCREEN, 1);
         cmdJoinPrivate = new Command("Join Private Channel", Command.SCREEN, 2);
@@ -53,7 +55,11 @@ public class ChannelListScreen extends List implements CommandListener {
     public void refreshList() {
         deleteAll();
         for (int i = 0; i < channelNames.size(); i++) {
-            append((String) channelNames.elementAt(i), null);
+            String name = (String) channelNames.elementAt(i);
+            int unread = (i < channelUnreadCount.size())
+                ? ((Integer) channelUnreadCount.elementAt(i)).intValue() : 0;
+            String label = (unread > 0) ? (name + " (" + unread + " new)") : name;
+            append(label, null);
         }
     }
 

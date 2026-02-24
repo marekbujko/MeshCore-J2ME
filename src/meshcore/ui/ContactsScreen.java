@@ -15,15 +15,17 @@ public class ContactsScreen extends List implements CommandListener {
 
     private final AppController app;
     private final Vector contactNames;
+    private final Vector contactUnreadCount;
     private final Command cmdDM;
     private final Command cmdRemove;
     private final Command cmdRefresh;
     private final Command cmdBack;
 
-    public ContactsScreen(AppController app, Vector contactNames) {
+    public ContactsScreen(AppController app, Vector contactNames, Vector contactUnreadCount) {
         super("Contacts (" + contactNames.size() + ")", List.IMPLICIT);
         this.app = app;
         this.contactNames = contactNames;
+        this.contactUnreadCount = contactUnreadCount;
         refreshList();
         cmdDM = new Command("Message", Command.OK, 1);
         cmdRemove = new Command("Remove", Command.SCREEN, 4);
@@ -39,7 +41,11 @@ public class ContactsScreen extends List implements CommandListener {
     public void refreshList() {
         deleteAll();
         for (int i = 0; i < contactNames.size(); i++) {
-            append((String) contactNames.elementAt(i), null);
+            String name = (String) contactNames.elementAt(i);
+            int unread = (i < contactUnreadCount.size())
+                ? ((Integer) contactUnreadCount.elementAt(i)).intValue() : 0;
+            String label = (unread > 0) ? (name + " (" + unread + " new)") : name;
+            append(label, null);
         }
         if (contactNames.size() == 0) {
             append("(no contacts yet)", null);
