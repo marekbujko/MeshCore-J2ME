@@ -136,7 +136,10 @@ public final class FrameHandler {
     private void handleBattery(byte[] f) {
         if (f.length >= 3) {
             int mv = (f[1] & 0xFF) | ((f[2] & 0xFF) << 8);
-            String s = mv + "mV (" + (mv / 1000) + "." + ((mv % 1000) / 100) + "V)";
+            int vInt = mv / 1000;
+            int frac = (mv % 1000) / 10; // two decimals
+            String fracStr = (frac < 10) ? ("0" + frac) : String.valueOf(frac);
+            String s = mv + "mV (" + vInt + "." + fracStr + "V)";
             if (f.length >= 11) {
                 s += "  " + FrameTransport.readUint32LE(f, 3) + "/" + FrameTransport.readUint32LE(f, 7) + " KB";
             }

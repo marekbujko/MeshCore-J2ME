@@ -80,6 +80,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private ActivityLogScreen activityLogScreen;
 
     private FrameHandler frameHandler;
+    private String lastBatteryStatus = "";
+    private volatile boolean keepAliveRunning = false;
 
     // -----------------------------------------------------------------------
     // MIDlet lifecycle
@@ -122,6 +124,9 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void showMainMenu() {
         mainMenuScreen = new MainMenuScreen(this);
+        if (lastBatteryStatus != null && lastBatteryStatus.length() > 0) {
+            mainMenuScreen.setTitle("MeshCore " + lastBatteryStatus);
+        }
         display.setCurrent(mainMenuScreen);
     }
 
@@ -297,12 +302,17 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             sendGetContacts();
             sendGetChannels();
 
+            // Kick off initial battery query so main menu shows voltage quickly
+            sendGetBattery();
+
             running = true;
             new Thread(new Runnable() {
                 public void run() {
                     receiveLoop();
                 }
             }).start();
+
+            startKeepAlive();
 
             display.callSerially(new Runnable() {
                 public void run() {
@@ -320,6 +330,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void disconnect() {
         running = false;
         connected = false;
+        keepAliveRunning = false;
         transport = null;
         try {
             if (conn != null) conn.close();
@@ -656,6 +667,29 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         }
     }
 
+    private void startKeepAlive() {
+        keepAliveRunning = true;
+        new Thread(new Runnable() {
+            public void run() {
+                while (keepAliveRunning) {
+                    try {
+                        Thread.sleep(30000);
+                    } catch (InterruptedException ignore) {}
+                    if (!keepAliveRunning || !running || !connected || transport == null) continue;
+                    try {
+                        byte[] cmd = {(byte) ProtocolConstants.CMD_GET_BATT_STORAGE};
+                        transport.sendFrame(cmd);
+                    } catch (IOException e) {
+                        appendActivityLog("[!] Keepalive failed, stopping connection");
+                        connected = false;
+                        running = false;
+                        keepAliveRunning = false;
+                    }
+                }
+            }
+        }).start();
+    }
+
     private static String sanitizeAlertMessage(String s, int maxLen) {
         if (s == null || s.length() == 0) return "New message";
         StringBuffer sb = new StringBuffer();
@@ -691,6 +725,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         }
         connected = false;
         running = false;
+        keepAliveRunning = false;
     }
 
     // -----------------------------------------------------------------------
@@ -758,11 +793,33 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void onBatteryUpdate(final String info) {
         final SettingsScreen set = settingsScreen;
+        final MainMenuScreen menu = mainMenuScreen;
+        final String status = formatBatteryStatus(info);
+        lastBatteryStatus = status;
         display.callSerially(new Runnable() {
             public void run() {
                 if (set != null) set.setBattInfo(info);
+                if (menu != null) {
+                    String title = "MeshCore";
+                    if (status.length() > 0) title += " " + status;
+                    menu.setTitle(title);
+                }
             }
         });
+    }
+
+    private static String formatBatteryStatus(String info) {
+        if (info == null) return "";
+        int p1 = info.indexOf('(');
+        int p2 = (p1 >= 0) ? info.indexOf(')', p1) : -1;
+        if (p1 >= 0 && p2 > p1) {
+            return info.substring(p1, p2 + 1).trim(); // e.g. "(4.18V)"
+        }
+        int m = info.indexOf("mV");
+        if (m > 0) {
+            return info.substring(0, m + 2).trim(); // e.g. "4100mV"
+        }
+        return "";
     }
 
     public void onStats(final String title, final String content) {
