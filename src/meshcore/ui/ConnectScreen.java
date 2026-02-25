@@ -22,8 +22,9 @@ public class ConnectScreen extends Form implements CommandListener {
     public ConnectScreen(AppController app) {
         super("MeshCore");
         this.app = app;
-        tfHost = new TextField("ESP32 IP:", ConnectStorage.loadHost(), 40, TextField.ANY);
-        tfPort = new TextField("Port:", ConnectStorage.loadPort(), 6, TextField.NUMERIC);
+        String[] hp = ConnectStorage.loadHostAndPort();
+        tfHost = new TextField("ESP32 IP:", hp[0], 40, TextField.ANY);
+        tfPort = new TextField("Port:", hp[1], 6, TextField.NUMERIC);
         append(tfHost);
         append(tfPort);
         cmdConnect = new Command("Connect", Command.OK, 1);

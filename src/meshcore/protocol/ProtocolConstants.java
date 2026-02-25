@@ -60,6 +60,10 @@ public final class ProtocolConstants {
     public static final int ERR_FILE_IO          = 5;
     public static final int ERR_ILLEGAL_ARG      = 6;
 
+    // Default node limits (channel slots and contacts)
+    public static final int MAX_CHANNEL_SLOTS = 40;
+    public static final int MAX_CONTACTS = 350;
+
     // App protocol version
     public static final int APP_VER = 3;
 

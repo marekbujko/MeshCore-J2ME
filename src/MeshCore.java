@@ -339,7 +339,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void sendGetChannels() {
         try {
-            for (int i = 0; i < 8; i++) {
+            for (int i = 0; i < ProtocolConstants.MAX_CHANNEL_SLOTS; i++) {
                 transport.sendFrame(new byte[]{
                     (byte) ProtocolConstants.CMD_GET_CHANNEL,
                     (byte) (i & 0xFF)

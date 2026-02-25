@@ -15,41 +15,39 @@ public final class ConnectStorage {
 
     private ConnectStorage() {}
 
-    public static String loadHost() {
+    /** Load host and port in one RMS open. Returns String[]{host, port}. */
+    public static String[] loadHostAndPort() {
+        String[] out = new String[] { DEFAULT_HOST, DEFAULT_PORT };
         try {
             RecordStore rs = RecordStore.openRecordStore(STORE_NAME, true);
             if (rs.getNumRecords() < 1) {
                 rs.closeRecordStore();
-                return DEFAULT_HOST;
+                return out;
             }
             byte[] data = rs.getRecord(1);
             rs.closeRecordStore();
             String s = new String(data, "UTF-8");
             int sep = s.indexOf('\n');
-            if (sep < 0) return s.length() > 0 ? s : DEFAULT_HOST;
-            return s.substring(0, sep).trim();
+            if (sep >= 0) {
+                String h = s.substring(0, sep).trim();
+                String p = s.substring(sep + 1).trim();
+                if (h.length() > 0) out[0] = h;
+                if (p.length() > 0) out[1] = p;
+            } else if (s.length() > 0) {
+                out[0] = s.trim();
+            }
         } catch (Exception e) {
-            return DEFAULT_HOST;
+            // use defaults
         }
+        return out;
+    }
+
+    public static String loadHost() {
+        return loadHostAndPort()[0];
     }
 
     public static String loadPort() {
-        try {
-            RecordStore rs = RecordStore.openRecordStore(STORE_NAME, true);
-            if (rs.getNumRecords() < 1) {
-                rs.closeRecordStore();
-                return DEFAULT_PORT;
-            }
-            byte[] data = rs.getRecord(1);
-            rs.closeRecordStore();
-            String s = new String(data, "UTF-8");
-            int sep = s.indexOf('\n');
-            if (sep < 0) return DEFAULT_PORT;
-            String port = s.substring(sep + 1).trim();
-            return port.length() > 0 ? port : DEFAULT_PORT;
-        } catch (Exception e) {
-            return DEFAULT_PORT;
-        }
+        return loadHostAndPort()[1];
     }
 
     public static void save(String host, String port) {
