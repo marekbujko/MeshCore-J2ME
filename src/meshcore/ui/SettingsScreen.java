@@ -20,6 +20,7 @@ public class SettingsScreen extends Form implements CommandListener {
     private final TextField tfCr;
     private final TextField tfTxPwr;
     private final StringItem nodeInfoItem;
+    private final StringItem keyItem;
     private final StringItem battInfo;
     private final Command cmdSave;
     private final Command cmdRefresh;
@@ -29,7 +30,7 @@ public class SettingsScreen extends Form implements CommandListener {
     private final Command cmdBack;
 
     public SettingsScreen(AppController app, String nodeName, String firmwareVer,
-            long nodeFreq, long nodeBw, int nodeSf, int nodeCr, int nodeTxPwr) {
+            String nodePublicKeyHex, long nodeFreq, long nodeBw, int nodeSf, int nodeCr, int nodeTxPwr) {
         super("Settings");
         this.app = app;
         String nn = (nodeName != null ? nodeName : "");
@@ -37,8 +38,10 @@ public class SettingsScreen extends Form implements CommandListener {
         String nameInit = sanitizeForTextField(nn, 20);
         if (nameInit.length() == 0) nameInit = "Node0";
         nodeInfoItem = new StringItem("Node:", nn + " " + fw);
+        keyItem = new StringItem("Public key:", formatPublicKey(nodePublicKeyHex));
         battInfo = new StringItem("Battery:", "Loading...");
         append(nodeInfoItem);
+        append(keyItem);
         append(battInfo);
         tfNodeName = new TextField("Name:", nameInit, 20, TextField.ANY);
         append(tfNodeName);
@@ -65,6 +68,13 @@ public class SettingsScreen extends Form implements CommandListener {
         addCommand(cmdAdvert);
         addCommand(cmdBack);
         setCommandListener(this);
+    }
+
+    private static String formatPublicKey(String hex) {
+        if (hex == null || hex.length() == 0) return "n/a";
+        hex = hex.trim().toLowerCase();
+        if (hex.length() <= 24) return hex;
+        return "<" + hex.substring(0, 8) + "..." + hex.substring(hex.length() - 8) + ">";
     }
 
     private static String sanitizeForTextField(String s, int maxLen) {
@@ -95,6 +105,10 @@ public class SettingsScreen extends Form implements CommandListener {
         String nn = (nodeName != null ? nodeName : "");
         String fw = (firmwareVer != null ? firmwareVer : "");
         nodeInfoItem.setText(nn + " " + fw);
+    }
+
+    public void setPublicKey(String hex) {
+        keyItem.setText(formatPublicKey(hex));
     }
 
     public void setBattInfo(String s) {

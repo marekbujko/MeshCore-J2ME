@@ -8,7 +8,6 @@ import meshcore.protocol.FrameHandler;
 import meshcore.protocol.FrameHandlerListener;
 import meshcore.protocol.ProtocolConstants;
 import meshcore.net.FrameTransport;
-import meshcore.util.ChannelStorage;
 import meshcore.util.ConnectStorage;
 import meshcore.util.FrameUtils;
 import meshcore.util.ParseUtils;
@@ -53,6 +52,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private String myName = "NokiaUser";
     private String nodeName = "";
     private String firmwareVer = "";
+    private String nodePublicKeyHex = "";
 
     private Vector channelNames = new Vector();
     private Vector channelBuffers = new Vector();
@@ -90,7 +90,6 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void startApp() {
         display = Display.getDisplay(this);
         frameHandler = new FrameHandler(this, contactNames, contactKeys);
-        initChannels();
         showConnectScreen();
     }
 
@@ -101,13 +100,6 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         channelNames.addElement(ChannelListScreen.PUBLIC_CHANNEL);
         channelBuffers.addElement(new StringBuffer());
         channelUnreadCount.addElement(new Integer(0));
-        Vector custom = ChannelStorage.load();
-        lastSavedCustom = copyVector(custom);
-        for (int i = 0; i < custom.size(); i++) {
-            channelNames.addElement(custom.elementAt(i));
-            channelBuffers.addElement(new StringBuffer());
-            channelUnreadCount.addElement(new Integer(0));
-        }
     }
 
     public void pauseApp() {}
@@ -164,7 +156,6 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         channelNames.addElement(name);
         channelBuffers.addElement(new StringBuffer());
         channelUnreadCount.addElement(new Integer(0));
-        saveCustomChannels();
         sendSetChannel(channelNames.size() - 1, name, secretBytes);
     }
 
@@ -179,62 +170,24 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void removeChannel(int index) {
         if (index <= 0 || index >= channelNames.size()) return;
+        sendClearChannelSlot(index);
         channelNames.removeElementAt(index);
         channelBuffers.removeElementAt(index);
         channelUnreadCount.removeElementAt(index);
-        saveCustomChannels();
     }
 
-    private Vector lastSavedCustom;
-
-    private void saveCustomChannels() {
-        saveCustomChannels(true);
-    }
-
-    private void saveCustomChannels(boolean immediate) {
-        Vector custom = new Vector();
-        for (int i = 1; i < channelNames.size(); i++) {
-            custom.addElement(channelNames.elementAt(i));
+    /** Tell the node to clear this channel slot (empty name + zero secret). */
+    private void sendClearChannelSlot(int channelIndex) {
+        if (!connected || transport == null) return;
+        try {
+            byte[] f = new byte[2 + 32 + 16];
+            f[0] = (byte) ProtocolConstants.CMD_SET_CHANNEL;
+            f[1] = (byte) (channelIndex & 0xFF);
+            for (int i = 2; i < 2 + 32 + 16; i++) f[i] = 0;
+            transport.sendFrame(f);
+        } catch (Exception e) {
+            appendActivityLog("[!] Clear channel failed");
         }
-        if (lastSavedCustom != null && vectorsEqual(lastSavedCustom, custom)) return;
-        lastSavedCustom = copyVector(custom);
-        ChannelStorage.save(custom);
-    }
-
-    private static boolean vectorsEqual(Vector a, Vector b) {
-        if (a.size() != b.size()) return false;
-        for (int i = 0; i < a.size(); i++) {
-            if (!eq(a.elementAt(i), b.elementAt(i))) return false;
-        }
-        return true;
-    }
-
-    private static boolean eq(Object a, Object b) {
-        return (a == null && b == null) || (a != null && a.equals(b));
-    }
-
-    private static Vector copyVector(Vector v) {
-        Vector c = new Vector(v.size());
-        for (int i = 0; i < v.size(); i++) c.addElement(v.elementAt(i));
-        return c;
-    }
-
-    private volatile Thread debounceSaveThread;
-
-    private void scheduleDebouncedSave() {
-        if (debounceSaveThread != null && debounceSaveThread.isAlive()) return;
-        debounceSaveThread = new Thread(new Runnable() {
-            public void run() {
-                try { Thread.sleep(450); } catch (InterruptedException e) { return; }
-                debounceSaveThread = null;
-                display.callSerially(new Runnable() {
-                    public void run() {
-                        saveCustomChannels(false);
-                    }
-                });
-            }
-        });
-        debounceSaveThread.start();
     }
 
     public void showContactsScreen() {
@@ -256,7 +209,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void showSettingsScreen() {
         settingsScreen = new SettingsScreen(this, nodeName, firmwareVer,
-                nodeFreq, nodeBw, nodeSf, nodeCr, nodeTxPwr);
+                nodePublicKeyHex, nodeFreq, nodeBw, nodeSf, nodeCr, nodeTxPwr);
         display.setCurrent(settingsScreen);
         new Thread(new Runnable() {
             public void run() {
@@ -282,6 +235,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             ConnectStorage.save(host, String.valueOf(port));
             setConnectTitle("Connected!");
             appendActivityLog("[*] Connected");
+            initChannels();
 
             transport.sendFrame(new byte[]{
                 (byte) ProtocolConstants.CMD_DEVICE_QUERY,
@@ -302,6 +256,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
             sendGetContacts();
             sendGetChannels();
+            scheduleChannelsSyncedLog();
 
             // Kick off initial battery query so main menu shows voltage quickly
             sendGetBattery();
@@ -737,7 +692,12 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         refreshSettingsNodeIfShown();
     }
 
-    public void onSelfInfo(String name, int txPwr, long freq, long bw, int sf, int cr) {
+    public void onSelfInfo(String name, int txPwr, long freq, long bw, int sf, int cr, byte[] nodePublicKey) {
+        String newKeyHex = (nodePublicKey != null && nodePublicKey.length >= 32)
+            ? FrameUtils.bytesToHex(nodePublicKey, 0, 32) : null;
+        if (newKeyHex != null) {
+            nodePublicKeyHex = newKeyHex;
+        }
         nodeName = name;
         nodeTxPwr = txPwr;
         nodeFreq = freq;
@@ -752,10 +712,12 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private void refreshSettingsNodeIfShown() {
         final SettingsScreen set = settingsScreen;
         if (set == null) return;
+        final String keyHex = nodePublicKeyHex;
         display.callSerially(new Runnable() {
             public void run() {
                 if (display.getCurrent() == set) {
                     set.setNodeInfo(nodeName, firmwareVer);
+                    set.setPublicKey(keyHex);
                 }
             }
         });
@@ -784,11 +746,23 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 }
                 channelNames.setElementAt(name, chIdx);
                 ensureChannelUnreadSize(channelNames.size());
-                if (chIdx >= 1) {
-                    scheduleDebouncedSave();
-                }
             }
         });
+    }
+
+    /** Log total channel count once after sync (like contacts), with short delay. */
+    private void scheduleChannelsSyncedLog() {
+        new Thread(new Runnable() {
+            public void run() {
+                try { Thread.sleep(2000); } catch (InterruptedException e) { return; }
+                final int n = channelNames.size();
+                display.callSerially(new Runnable() {
+                    public void run() {
+                        appendActivityLog("[*] Channels synced: " + n);
+                    }
+                });
+            }
+        }).start();
     }
 
     public void onBatteryUpdate(final String info) {

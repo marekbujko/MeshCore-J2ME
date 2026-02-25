@@ -87,12 +87,17 @@ public final class FrameHandler {
 
     private void handleSelfInfo(byte[] f) {
         int txPwr = f.length > 3 ? f[2] & 0xFF : 0;
+        byte[] nodePublicKey = null;
+        if (f.length >= 36) {
+            nodePublicKey = new byte[32];
+            System.arraycopy(f, 4, nodePublicKey, 0, 32);
+        }
         long freqRaw = f.length > 55 ? FrameTransport.readUint32LE(f, 48) : 0;
         long bwRaw = f.length > 59 ? FrameTransport.readUint32LE(f, 52) : 0;
         int sf = f.length > 56 ? f[56] & 0xFF : 0;
         int cr = f.length > 57 ? f[57] & 0xFF : 0;
         String name = f.length > 58 ? FrameUtils.extractVarchar(f, 58) : "";
-        listener.onSelfInfo(name, txPwr, freqRaw, bwRaw, sf, cr);
+        listener.onSelfInfo(name, txPwr, freqRaw, bwRaw, sf, cr, nodePublicKey);
     }
 
     private void handleContact(byte[] f) {
