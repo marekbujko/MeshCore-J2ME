@@ -52,6 +52,14 @@ public final class ProtocolConstants {
     public static final int PUSH_ADVERT         = 0x80;
     public static final int PUSH_PATH_UPDATED   = 0x81;
 
+    // Error codes (byte in RESP_ERR frame)
+    public static final int ERR_UNSUPPORTED_CMD = 1;
+    public static final int ERR_NOT_FOUND        = 2;
+    public static final int ERR_TABLE_FULL       = 3;
+    public static final int ERR_BAD_STATE        = 4;
+    public static final int ERR_FILE_IO          = 5;
+    public static final int ERR_ILLEGAL_ARG      = 6;
+
     // App protocol version
     public static final int APP_VER = 3;
 

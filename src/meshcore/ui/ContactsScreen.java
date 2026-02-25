@@ -1,7 +1,5 @@
 package meshcore.ui;
 
-import javax.microedition.lcdui.Alert;
-import javax.microedition.lcdui.AlertType;
 import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.CommandListener;
 import javax.microedition.lcdui.Displayable;
@@ -70,7 +68,10 @@ public class ContactsScreen extends List implements CommandListener {
             final int idx = getSelectedIndex();
             if (idx >= 0 && idx < contactNames.size()) {
                 String name = (String) contactNames.elementAt(idx);
-                Alert confirm = new Alert("Remove contact", "Remove " + name + "?", null, AlertType.CONFIRMATION);
+                javax.microedition.lcdui.Alert confirm =
+                        new javax.microedition.lcdui.Alert("Remove contact",
+                                "Remove " + name + "?", null,
+                                javax.microedition.lcdui.AlertType.CONFIRMATION);
                 confirm.addCommand(new Command("Yes", Command.OK, 1));
                 confirm.addCommand(new Command("No", Command.CANCEL, 2));
                 confirm.setCommandListener(new CommandListener() {

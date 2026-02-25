@@ -1,7 +1,5 @@
 package meshcore.ui;
 
-import javax.microedition.lcdui.Alert;
-import javax.microedition.lcdui.AlertType;
 import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.CommandListener;
 import javax.microedition.lcdui.Displayable;
@@ -103,9 +101,8 @@ public class ChannelListScreen extends List implements CommandListener {
                         if (name.length() > 0 && secret.length() == 32) {
                             app.addPrivateChannel(name, secret);
                         } else if (secret.length() != 32) {
-                            Alert a = new Alert("", "Secret must be 32 hex chars", null, AlertType.WARNING);
-                            a.setTimeout(2500);
-                            app.getDisplay().setCurrent(a, ChannelListScreen.this);
+                            Alerts.warning(app.getDisplay(), ChannelListScreen.this,
+                                    "Secret", "Secret must be 32 hex chars", 2500);
                             return;
                         }
                     }
@@ -118,14 +115,13 @@ public class ChannelListScreen extends List implements CommandListener {
         if (c == cmdRemove) {
             final int idx = getSelectedIndex();
             if (idx <= 0) {
-                Alert a = new Alert("", "Cannot remove Public channel", null, AlertType.INFO);
-                a.setTimeout(2000);
-                app.getDisplay().setCurrent(a, this);
+                Alerts.info(app.getDisplay(), this, "Channel", "Cannot remove Public channel");
                 return;
             }
             if (idx > 0 && idx < channelNames.size()) {
                 String name = (String) channelNames.elementAt(idx);
-                Alert confirm = new Alert("Remove channel", "Remove " + name + "?", null, AlertType.CONFIRMATION);
+                javax.microedition.lcdui.Alert confirm =
+                        Alerts.confirm("Remove channel", "Remove " + name + "?");
                 confirm.addCommand(new Command("Yes", Command.OK, 1));
                 confirm.addCommand(new Command("No", Command.CANCEL, 2));
                 confirm.setCommandListener(new CommandListener() {

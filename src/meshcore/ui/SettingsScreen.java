@@ -1,6 +1,5 @@
 package meshcore.ui;
 
-import javax.microedition.lcdui.Alert;
 import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.CommandListener;
 import javax.microedition.lcdui.Displayable;
@@ -103,9 +102,7 @@ public class SettingsScreen extends Form implements CommandListener {
     }
 
     public void showInfo(String title, String text) {
-        Alert a = new Alert(title, text, null, null);
-        a.setTimeout(Alert.FOREVER);
-        app.getDisplay().setCurrent(a, this);
+        Alerts.info(app.getDisplay(), this, title, text);
     }
 
     public String getNodeName() {

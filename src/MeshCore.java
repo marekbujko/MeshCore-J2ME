@@ -22,6 +22,7 @@ import meshcore.ui.ChannelScreen;
 import meshcore.ui.ContactsScreen;
 import meshcore.ui.DMScreen;
 import meshcore.ui.SettingsScreen;
+import meshcore.ui.Alerts;
 
 /**
  * MeshCore WiFi TCP Client for Nokia Asha 210 (J2ME MIDP 2.0 / CLDC 1.1)
@@ -659,9 +660,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         if (current == null) return;
         try {
             String safe = sanitizeAlertMessage(message, 60);
-            Alert a = new Alert("Message", safe, null, AlertType.INFO);
-            a.setTimeout(2000);
-            display.setCurrent(a, current);
+            Alerts.show(display, current, "Message", safe,
+                    AlertType.INFO, 2000);
         } catch (Exception e) {
             /* Nokia S40 can throw on Alert with empty/long/special chars */
         }
@@ -841,7 +841,20 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void onError(int code) {
-        appendActivityLog("[!] Error " + code);
+        String msg = getErrorCodeMessage(code);
+        appendActivityLog("[!] Error " + code + (msg != null ? " (" + msg + ")" : ""));
+    }
+
+    private static String getErrorCodeMessage(int code) {
+        switch (code) {
+            case ProtocolConstants.ERR_UNSUPPORTED_CMD: return "unsupported command";
+            case ProtocolConstants.ERR_NOT_FOUND:       return "not found";
+            case ProtocolConstants.ERR_TABLE_FULL:      return "table full";
+            case ProtocolConstants.ERR_BAD_STATE:        return "bad state";
+            case ProtocolConstants.ERR_FILE_IO:         return "file I/O error";
+            case ProtocolConstants.ERR_ILLEGAL_ARG:      return "illegal argument";
+            default: return null;
+        }
     }
 
     public boolean isContactsScreenCurrent() {
