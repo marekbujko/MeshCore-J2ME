@@ -5,36 +5,63 @@ import javax.microedition.lcdui.CommandListener;
 import javax.microedition.lcdui.Displayable;
 import javax.microedition.lcdui.List;
 
+import meshcore.protocol.ProtocolConstants;
+
 /**
- * Main menu: Channel Chat, Contacts, Settings, Disconnect.
+ * Main menu list: Channels, Contacts.
+ * Options menu: Advert • Zero Hop, Advert • Flood Routed, Activity Log, Disconnect, Settings.
  */
 public class MainMenuScreen extends List implements CommandListener {
 
     private final AppController app;
-    private final Command cmdBack;
+    private final Command cmdAdvertZeroHop;
+    private final Command cmdAdvertFloodRouted;
+    private final Command cmdActivityLog;
+    private final Command cmdDisconnect;
+    private final Command cmdSettings;
 
     public static final int IDX_CHANNEL = 0;
     public static final int IDX_CONTACTS = 1;
-    public static final int IDX_SETTINGS = 2;
-    public static final int IDX_ACTIVITY_LOG = 3;
-    public static final int IDX_DISCONNECT = 4;
 
     public MainMenuScreen(AppController app) {
         super("MeshCore", List.IMPLICIT);
         this.app = app;
         append("Channels", null);
         append("Contacts / DM", null);
-        append("Settings", null);
-        append("Activity Log", null);
-        append("Disconnect", null);
-        cmdBack = new Command("Back", Command.BACK, 2);
-        addCommand(cmdBack);
+        cmdAdvertZeroHop = new Command("Advert • Zero Hop", Command.SCREEN, 0);
+        cmdAdvertFloodRouted = new Command("Advert • Flood Routed", Command.SCREEN, 1);
+        cmdActivityLog = new Command("Activity Log", Command.SCREEN, 2);
+        cmdDisconnect = new Command("Disconnect", Command.SCREEN, 3);
+        cmdSettings = new Command("Settings", Command.BACK, 4);
+        addCommand(cmdAdvertZeroHop);
+        addCommand(cmdAdvertFloodRouted);
+        addCommand(cmdActivityLog);
+        addCommand(cmdDisconnect);
+        addCommand(cmdSettings);
         setCommandListener(this);
     }
 
     public void commandAction(Command c, Displayable d) {
-        if (c == cmdBack) {
-            return; // Back on main menu does nothing (original behavior)
+        if (c == cmdAdvertZeroHop) {
+            showAdvertConfirm("Zero Hop", ProtocolConstants.ADVERT_ZERO_HOP);
+            return;
+        }
+        if (c == cmdAdvertFloodRouted) {
+            showAdvertConfirm("Flood Routed", ProtocolConstants.ADVERT_FLOOD);
+            return;
+        }
+        if (c == cmdActivityLog) {
+            app.showActivityLogScreen();
+            return;
+        }
+        if (c == cmdDisconnect) {
+            app.disconnect();
+            app.showConnectScreen();
+            return;
+        }
+        if (c == cmdSettings) {
+            app.showSettingsScreen();
+            return;
         }
         if (c == List.SELECT_COMMAND) {
             int idx = getSelectedIndex();
@@ -47,14 +74,35 @@ public class MainMenuScreen extends List implements CommandListener {
                     }
                 }).start();
                 app.showContactsScreen();
-            } else if (idx == IDX_SETTINGS) {
-                app.showSettingsScreen();
-            } else if (idx == IDX_ACTIVITY_LOG) {
-                app.showActivityLogScreen();
-            } else if (idx == IDX_DISCONNECT) {
-                app.disconnect();
-                app.showConnectScreen();
             }
         }
+    }
+
+    private void showAdvertConfirm(String advertName, final int advertType) {
+        javax.microedition.lcdui.Alert alert = Alerts.confirm("Advert", "Send " + advertName + " Advert?");
+        Command cmdYes = new Command("Yes", Command.OK, 1);
+        Command cmdNo = new Command("No", Command.CANCEL, 2);
+        alert.addCommand(cmdYes);
+        alert.addCommand(cmdNo);
+        final MainMenuScreen self = this;
+        alert.setCommandListener(new CommandListener() {
+            public void commandAction(Command cmd, Displayable disp) {
+                if (cmd.getCommandType() == Command.OK) {
+                    app.setAdvertType(advertType);
+                    new Thread(new Runnable() {
+                        public void run() {
+                            app.sendAdvert();
+                            app.getDisplay().callSerially(new Runnable() {
+                                public void run() {
+                                    Alerts.info(app.getDisplay(), self, "Success", "Advert sent");
+                                }
+                            });
+                        }
+                    }).start();
+                }
+                app.getDisplay().setCurrent(self);
+            }
+        });
+        app.getDisplay().setCurrent(alert, this);
     }
 }

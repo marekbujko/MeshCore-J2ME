@@ -26,7 +26,6 @@ public class SettingsScreen extends Form implements CommandListener {
     private final Command cmdRefresh;
     private final Command cmdStats;
     private final Command cmdTime;
-    private final Command cmdAdvert;
     private final Command cmdBack;
 
     public SettingsScreen(AppController app, String nodeName, String firmwareVer,
@@ -59,13 +58,11 @@ public class SettingsScreen extends Form implements CommandListener {
         cmdRefresh = new Command("Refresh", Command.SCREEN, 3);
         cmdStats = new Command("Stats", Command.SCREEN, 4);
         cmdTime = new Command("Time", Command.SCREEN, 5);
-        cmdAdvert = new Command("Advertise", Command.SCREEN, 3);
         cmdBack = new Command("Back", Command.BACK, 2);
         addCommand(cmdSave);
         addCommand(cmdRefresh);
         addCommand(cmdStats);
         addCommand(cmdTime);
-        addCommand(cmdAdvert);
         addCommand(cmdBack);
         setCommandListener(this);
     }
@@ -179,13 +176,6 @@ public class SettingsScreen extends Form implements CommandListener {
                 }
             }).start();
             return;
-        }
-        if (c == cmdAdvert) {
-            new Thread(new Runnable() {
-                public void run() {
-                    app.sendAdvert();
-                }
-            }).start();
         }
     }
 }

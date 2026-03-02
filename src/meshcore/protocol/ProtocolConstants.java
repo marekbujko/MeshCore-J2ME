@@ -16,6 +16,10 @@ public final class ProtocolConstants {
     public static final int CMD_SET_DEVICE_TIME  = 6;
     public static final int CMD_SEND_SELF_ADVERT  = 7;
     public static final int CMD_SET_ADVERT_NAME  = 8;
+
+    /** Advert type: second byte in CMD_SEND_SELF_ADVERT frame */
+    public static final int ADVERT_FLOOD    = 0;
+    public static final int ADVERT_ZERO_HOP = 1;
     public static final int CMD_SYNC_NEXT_MESSAGE = 10;
     public static final int CMD_SET_RADIO_PARAMS  = 11;
     public static final int CMD_SET_RADIO_TX_PWR  = 12;

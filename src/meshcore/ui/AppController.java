@@ -34,6 +34,8 @@ public interface AppController {
     void sendGetStats();
     void sendGetDeviceTime();
     void sendAdvert();
+    void setAdvertType(int type);
+    int getAdvertType();
     void trySyncMessages();
 
     void appendChannel(int channelIndex, String line);

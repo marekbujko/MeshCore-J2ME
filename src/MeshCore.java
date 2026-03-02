@@ -69,6 +69,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private int nodeSf = 10;
     private int nodeCr = 5;
     private int nodeTxPwr = 20;
+    private int advertType = 0; // 0 = Flood, 1 = Zero hop
 
     // Screen references (for UI updates from background threads)
     private ConnectScreen connectScreen;
@@ -83,6 +84,12 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private FrameHandler frameHandler;
     private String lastBatteryStatus = "";
     private volatile boolean keepAliveRunning = false;
+    private volatile boolean userRequestedDisconnect = false;
+    private volatile boolean reconnectScheduled = false;
+    private volatile int titleRotationIndex = 0;
+    private static final int RECONNECT_ATTEMPTS = 5;
+    private static final int RECONNECT_DELAY_MS = 3000;
+    private static final int TITLE_ROTATION_MS = 3000;
 
     // -----------------------------------------------------------------------
     // MIDlet lifecycle
@@ -117,10 +124,69 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void showMainMenu() {
         mainMenuScreen = new MainMenuScreen(this);
-        if (lastBatteryStatus != null && lastBatteryStatus.length() > 0) {
-            mainMenuScreen.setTitle("MeshCore " + lastBatteryStatus);
-        }
+        updateMainMenuTitle();
         display.setCurrent(mainMenuScreen);
+    }
+
+    /** Set main menu title: when connected rotate with voltage; when disconnected cycle Disconnected/MeshCore. */
+    private void updateMainMenuTitle() {
+        final MainMenuScreen menu = mainMenuScreen;
+        if (menu == null) return;
+        String title;
+        String voltage = (lastBatteryStatus != null && lastBatteryStatus.length() > 0) ? (" " + lastBatteryStatus) : "";
+        if (connected) {
+            int idx = titleRotationIndex % 3;
+            if (idx == 0 || idx == 2) {
+                title = "Connected" + voltage;
+            } else {
+                title = "MeshCore" + voltage;
+            }
+        } else {
+            int idx = titleRotationIndex % 2;
+            title = (idx == 0)
+                ? (reconnectScheduled ? "Reconnecting..." : "Disconnected")
+                : "MeshCore";
+        }
+        menu.setTitle(title);
+    }
+
+    private void startTitleRotation() {
+        new Thread(new Runnable() {
+            public void run() {
+                while (connected && running) {
+                    try { Thread.sleep(TITLE_ROTATION_MS); } catch (InterruptedException e) { return; }
+                    if (!connected || !running) break;
+                    titleRotationIndex++;
+                    display.callSerially(new Runnable() {
+                        public void run() {
+                            if (mainMenuScreen != null && display.getCurrent() == mainMenuScreen && connected) {
+                                updateMainMenuTitle();
+                            }
+                        }
+                    });
+                }
+            }
+        }).start();
+    }
+
+    /** Cycle Disconnected / MeshCore when disconnected (stops when reconnected or user disconnects). */
+    private void startDisconnectedTitleRotation() {
+        new Thread(new Runnable() {
+            public void run() {
+                while (!connected && !userRequestedDisconnect) {
+                    try { Thread.sleep(TITLE_ROTATION_MS); } catch (InterruptedException e) { return; }
+                    if (connected || userRequestedDisconnect) break;
+                    titleRotationIndex++;
+                    display.callSerially(new Runnable() {
+                        public void run() {
+                            if (mainMenuScreen != null && display.getCurrent() == mainMenuScreen && !connected) {
+                                updateMainMenuTitle();
+                            }
+                        }
+                    });
+                }
+            }
+        }).start();
     }
 
     public void showConnectScreen() {
@@ -227,13 +293,14 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     // AppController: actions
     // -----------------------------------------------------------------------
     public void connect(String host, int port) {
+        userRequestedDisconnect = false;
         setConnectTitle("Connecting...");
         try {
             conn = (StreamConnection) Connector.open("socket://" + host + ":" + port);
             transport = new FrameTransport(conn.openInputStream(), conn.openOutputStream());
             connected = true;
             ConnectStorage.save(host, String.valueOf(port));
-            setConnectTitle("Connected!");
+            setConnectTitle("Connected");
             appendActivityLog("[*] Connected");
             initChannels();
 
@@ -273,6 +340,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             display.callSerially(new Runnable() {
                 public void run() {
                     showMainMenu();
+                    startTitleRotation();
                 }
             });
 
@@ -283,15 +351,61 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         }
     }
 
-    public void disconnect() {
-        running = false;
-        connected = false;
-        keepAliveRunning = false;
+    private void closeConnection() {
         transport = null;
         try {
             if (conn != null) conn.close();
         } catch (IOException ignore) {}
         conn = null;
+    }
+
+    public void disconnect() {
+        userRequestedDisconnect = true;
+        running = false;
+        connected = false;
+        keepAliveRunning = false;
+        closeConnection();
+    }
+
+    private void onConnectionLost() {
+        running = false;
+        connected = false;
+        keepAliveRunning = false;
+        closeConnection();
+        display.callSerially(new Runnable() {
+            public void run() {
+                if (mainMenuScreen != null) {
+                    updateMainMenuTitle();
+                    startDisconnectedTitleRotation();
+                }
+            }
+        });
+        scheduleReconnect();
+    }
+
+    private void scheduleReconnect() {
+        if (userRequestedDisconnect || reconnectScheduled) return;
+        reconnectScheduled = true;
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    String[] hp = ConnectStorage.loadHostAndPort();
+                    int port = ParseUtils.parseInt(hp[1], 5000);
+                    for (int attempt = 0; attempt < RECONNECT_ATTEMPTS; attempt++) {
+                        try {
+                            Thread.sleep(RECONNECT_DELAY_MS);
+                        } catch (InterruptedException e) { return; }
+                        if (userRequestedDisconnect) return;
+                        connect(hp[0], port);
+                        if (connected) return;
+                        appendActivityLog("[!] Reconnect " + (attempt + 1) + "/" + RECONNECT_ATTEMPTS + " failed");
+                    }
+                    appendActivityLog("[!] Reconnect gave up");
+                } finally {
+                    reconnectScheduled = false;
+                }
+            }
+        }).start();
     }
 
     public void sendChannelMessage(int channelIndex, String msg) {
@@ -431,10 +545,22 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void sendAdvert() {
         try {
-            byte[] f = {(byte) ProtocolConstants.CMD_SEND_SELF_ADVERT, 0};
+            int t = (advertType == ProtocolConstants.ADVERT_ZERO_HOP)
+                ? ProtocolConstants.ADVERT_ZERO_HOP : ProtocolConstants.ADVERT_FLOOD;
+            byte[] f = {(byte) ProtocolConstants.CMD_SEND_SELF_ADVERT, (byte) t};
             transport.sendFrame(f);
-            appendActivityLog("[*] Advertisement sent");
+            String kind = (t == ProtocolConstants.ADVERT_ZERO_HOP) ? "Zero Hop" : "Flood Routed";
+            appendActivityLog("[*] Advert sent (" + kind + ")");
         } catch (IOException ignore) {}
+    }
+
+    public void setAdvertType(int type) {
+        advertType = (type == ProtocolConstants.ADVERT_ZERO_HOP)
+            ? ProtocolConstants.ADVERT_ZERO_HOP : ProtocolConstants.ADVERT_FLOOD;
+    }
+
+    public int getAdvertType() {
+        return advertType;
     }
 
     public void trySyncMessages() {
@@ -628,17 +754,15 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             public void run() {
                 while (keepAliveRunning) {
                     try {
-                        Thread.sleep(30000);
+                        Thread.sleep(15000);
                     } catch (InterruptedException ignore) {}
                     if (!keepAliveRunning || !running || !connected || transport == null) continue;
                     try {
                         byte[] cmd = {(byte) ProtocolConstants.CMD_GET_BATT_STORAGE};
                         transport.sendFrame(cmd);
                     } catch (IOException e) {
-                        appendActivityLog("[!] Keepalive failed, stopping connection");
-                        connected = false;
-                        running = false;
-                        keepAliveRunning = false;
+                        appendActivityLog("[!] Keepalive failed");
+                        onConnectionLost();
                     }
                 }
             }
@@ -677,6 +801,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             }
         } catch (IOException e) {
             if (running) appendActivityLog("[!] Connection lost");
+            onConnectionLost();
+            return;
         }
         connected = false;
         running = false;
@@ -767,17 +893,11 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void onBatteryUpdate(final String info) {
         final SettingsScreen set = settingsScreen;
-        final MainMenuScreen menu = mainMenuScreen;
         final String status = formatBatteryStatus(info);
         lastBatteryStatus = status;
         display.callSerially(new Runnable() {
             public void run() {
                 if (set != null) set.setBattInfo(info);
-                if (menu != null) {
-                    String title = "MeshCore";
-                    if (status.length() > 0) title += " " + status;
-                    menu.setTitle(title);
-                }
             }
         });
     }

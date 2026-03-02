@@ -23,7 +23,7 @@ public class ConnectScreen extends Form implements CommandListener {
         super("MeshCore");
         this.app = app;
         String[] hp = ConnectStorage.loadHostAndPort();
-        tfHost = new TextField("ESP32 IP:", hp[0], 40, TextField.ANY);
+        tfHost = new TextField("MeshCore Node IP:", hp[0], 40, TextField.ANY);
         tfPort = new TextField("Port:", hp[1], 6, TextField.NUMERIC);
         append(tfHost);
         append(tfPort);
