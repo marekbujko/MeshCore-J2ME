@@ -23,6 +23,7 @@ public interface AppController {
     void showActivityLogScreen();
 
     void connect(String host, int port);
+    void connectWithSplash(String host, int port);
     void disconnect();
     void sendChannelMessage(int channelIndex, String msg);
     void sendDirectMessage(int idx, String msg);

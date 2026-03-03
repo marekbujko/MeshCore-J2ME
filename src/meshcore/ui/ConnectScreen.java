@@ -23,7 +23,7 @@ public class ConnectScreen extends Form implements CommandListener {
         super("MeshCore");
         this.app = app;
         String[] hp = ConnectStorage.loadHostAndPort();
-        tfHost = new TextField("MeshCore Node IP:", hp[0], 40, TextField.ANY);
+        tfHost = new TextField("Node IP:", hp[0], 40, TextField.ANY);
         tfPort = new TextField("Port:", hp[1], 6, TextField.NUMERIC);
         append(tfHost);
         append(tfPort);
@@ -40,11 +40,7 @@ public class ConnectScreen extends Form implements CommandListener {
         if (c == cmdConnect) {
             final String host = tfHost.getString().trim();
             final int port = ParseUtils.parseInt(tfPort.getString().trim(), 5000);
-            new Thread(new Runnable() {
-                public void run() {
-                    app.connect(host, port);
-                }
-            }).start();
+            app.connectWithSplash(host, port);
         }
     }
 }

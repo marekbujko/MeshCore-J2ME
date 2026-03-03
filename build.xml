@@ -80,4 +80,16 @@
             </target>
 
             -->
+    <!-- Copy resources (e.g. logo.png, icon.png) into the JAR -->
+    <target name="post-preverify">
+        <copy todir="${preverify.classes.dir}" failonerror="false">
+            <fileset dir="${resources.dir}" includes="*.png,*.jpg,*.gif"/>
+        </copy>
+    </target>
+    <!-- Ensure icon.png is in JAR for app icon (Nokia) -->
+    <target name="post-jar">
+        <jar destfile="${dist.dir}/${dist.jar}" update="true">
+            <zipfileset dir="${resources.dir}" includes="icon.png"/>
+        </jar>
+    </target>
 </project>

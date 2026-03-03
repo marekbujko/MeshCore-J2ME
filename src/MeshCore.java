@@ -10,6 +10,7 @@ import meshcore.protocol.ProtocolConstants;
 import meshcore.net.FrameTransport;
 import meshcore.util.ConnectStorage;
 import meshcore.util.FrameUtils;
+import meshcore.util.ImageUtils;
 import meshcore.util.ParseUtils;
 import meshcore.util.SHA256;
 import meshcore.ui.AppController;
@@ -97,7 +98,30 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void startApp() {
         display = Display.getDisplay(this);
         frameHandler = new FrameHandler(this, contactNames, contactKeys);
-        showConnectScreen();
+        showSplashScreen();
+    }
+
+    private void showSplashScreen() {
+        connectScreen = new ConnectScreen(this);
+        Image logo = null;
+        try {
+            logo = Image.createImage("/logo.png");
+        } catch (IOException ignore) {
+            try {
+                logo = Image.createImage("/logo.jpg");
+            } catch (IOException ignore2) {}
+        }
+        display.setCurrent(ImageUtils.createSplashCanvas(logo));
+        new Thread(new Runnable() {
+            public void run() {
+                try { Thread.sleep(3500); } catch (InterruptedException ignore) {}
+                display.callSerially(new Runnable() {
+                    public void run() {
+                        display.setCurrent(connectScreen);
+                    }
+                });
+            }
+        }).start();
     }
 
     private void initChannels() {
@@ -349,6 +373,84 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             appendActivityLog("[!] Connect failed: " + e.getMessage());
             connected = false;
         }
+    }
+
+    public void connectWithSplash(final String host, final int port) {
+        Image logo = null;
+        try {
+            logo = Image.createImage("/logo.png");
+        } catch (IOException ignore) {
+            try {
+                logo = Image.createImage("/logo.jpg");
+            } catch (IOException ignore2) {}
+        }
+        final String[] status = new String[]{"Connecting..."};
+        final Canvas splash = ImageUtils.createStatusSplashCanvas(logo, status);
+        display.setCurrent(splash);
+        new Thread(new Runnable() {
+            public void run() {
+                userRequestedDisconnect = false;
+                try {
+                    conn = (StreamConnection) Connector.open("socket://" + host + ":" + port);
+                    transport = new FrameTransport(conn.openInputStream(), conn.openOutputStream());
+                    connected = true;
+                    ConnectStorage.save(host, String.valueOf(port));
+                    appendActivityLog("[*] Connected");
+                    initChannels();
+                    transport.sendFrame(new byte[]{
+                        (byte) ProtocolConstants.CMD_DEVICE_QUERY,
+                        (byte) ProtocolConstants.APP_VER
+                    });
+                    byte[] nb = myName.getBytes("UTF-8");
+                    byte[] as = new byte[2 + 6 + nb.length];
+                    as[0] = (byte) ProtocolConstants.CMD_APP_START;
+                    as[1] = (byte) ProtocolConstants.APP_VER;
+                    System.arraycopy(nb, 0, as, 8, nb.length);
+                    transport.sendFrame(as);
+                    byte[] st = new byte[5];
+                    st[0] = (byte) ProtocolConstants.CMD_SET_DEVICE_TIME;
+                    FrameTransport.writeUint32LE(st, 1, getEpoch());
+                    transport.sendFrame(st);
+                    sendGetContacts();
+                    sendGetChannels();
+                    scheduleChannelsSyncedLog();
+                    sendGetBattery();
+                    running = true;
+                    new Thread(new Runnable() {
+                        public void run() {
+                            receiveLoop();
+                        }
+                    }).start();
+                    startKeepAlive();
+                    status[0] = "Connected";
+                    display.callSerially(new Runnable() {
+                        public void run() {
+                            splash.repaint();
+                        }
+                    });
+                    try {
+                        Thread.sleep(1500);
+                    } catch (InterruptedException ignore) {}
+                    display.callSerially(new Runnable() {
+                        public void run() {
+                            showMainMenu();
+                            startTitleRotation();
+                        }
+                    });
+                } catch (Exception e) {
+                    final String err = e.getMessage();
+                    appendActivityLog("[!] Connect failed: " + err);
+                    connected = false;
+                    connectScreen = new ConnectScreen(MeshCore.this);
+                    connectScreen.setTitle("Failed: " + err);
+                    display.callSerially(new Runnable() {
+                        public void run() {
+                            display.setCurrent(connectScreen);
+                        }
+                    });
+                }
+            }
+        }).start();
     }
 
     private void closeConnection() {
