@@ -3,6 +3,7 @@ package meshcore.ui;
 import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.CommandListener;
 import javax.microedition.lcdui.Displayable;
+import javax.microedition.lcdui.Image;
 import javax.microedition.lcdui.List;
 
 import meshcore.protocol.ProtocolConstants;
@@ -22,12 +23,17 @@ public class MainMenuScreen extends List implements CommandListener {
 
     public static final int IDX_CHANNEL = 0;
     public static final int IDX_CONTACTS = 1;
+    public static final int IDX_REPEATERS = 2;
 
     public MainMenuScreen(AppController app) {
         super("MeshCore", List.IMPLICIT);
         this.app = app;
-        append("Channels", null);
-        append("Contacts / DM", null);
+        Image iconChannels = loadIcon("/channels.png");
+        Image iconContacts = loadIcon("/contacts.png");
+        Image iconRepeaters = loadIcon("/repeaters.png");
+        append("Channels", iconChannels);
+        append("Contacts / DM", iconContacts);
+        append("Repeaters", iconRepeaters);
         cmdAdvertZeroHop = new Command("Advert • Zero Hop", Command.SCREEN, 0);
         cmdAdvertFloodRouted = new Command("Advert • Flood Routed", Command.SCREEN, 1);
         cmdActivityLog = new Command("Activity Log", Command.SCREEN, 2);
@@ -39,6 +45,14 @@ public class MainMenuScreen extends List implements CommandListener {
         addCommand(cmdDisconnect);
         addCommand(cmdSettings);
         setCommandListener(this);
+    }
+
+    private static Image loadIcon(String path) {
+        try {
+            return Image.createImage(path);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public void commandAction(Command c, Displayable d) {
@@ -74,6 +88,13 @@ public class MainMenuScreen extends List implements CommandListener {
                     }
                 }).start();
                 app.showContactsScreen();
+            } else if (idx == IDX_REPEATERS) {
+                new Thread(new Runnable() {
+                    public void run() {
+                        app.sendGetContacts();
+                    }
+                }).start();
+                app.showRepeatersScreen();
             }
         }
     }

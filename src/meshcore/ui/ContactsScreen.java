@@ -7,16 +7,18 @@ import javax.microedition.lcdui.List;
 import javax.microedition.lcdui.TextBox;
 import javax.microedition.lcdui.TextField;
 import java.util.Vector;
+import meshcore.protocol.ProtocolConstants;
 
 /**
  * Contacts list screen: tap to open DM, refresh to sync, remove contact.
- * Search command opens keyboard search to filter the list by name.
+ * Repeaters are excluded. Search command opens keyboard search to filter the list by name.
  */
 public class ContactsScreen extends List implements CommandListener {
 
     private final AppController app;
     private final Vector contactNames;
     private final Vector contactUnreadCount;
+    private final Vector contactTypes;
     /** Maps list position -> real contact index (for filtered view). */
     private final Vector visibleIndices;
     private String filterQuery;
@@ -26,11 +28,12 @@ public class ContactsScreen extends List implements CommandListener {
     private final Command cmdRefresh;
     private final Command cmdBack;
 
-    public ContactsScreen(AppController app, Vector contactNames, Vector contactUnreadCount) {
-        super("Contacts (" + contactNames.size() + ")", List.IMPLICIT);
+    public ContactsScreen(AppController app, Vector contactNames, Vector contactUnreadCount, Vector contactTypes) {
+        super("Contacts", List.IMPLICIT);
         this.app = app;
         this.contactNames = contactNames;
         this.contactUnreadCount = contactUnreadCount;
+        this.contactTypes = contactTypes;
         this.visibleIndices = new Vector();
         this.filterQuery = "";
         cmdSearch = new Command("Search", Command.ITEM, 0);
@@ -51,7 +54,12 @@ public class ContactsScreen extends List implements CommandListener {
         deleteAll();
         visibleIndices.removeAllElements();
         String fq = (filterQuery != null) ? filterQuery.trim().toLowerCase() : "";
+        int nonRepeaterCount = 0;
         for (int i = 0; i < contactNames.size(); i++) {
+            if (i < contactTypes.size() && ((Integer) contactTypes.elementAt(i)).intValue() == ProtocolConstants.ADV_TYPE_REPEATER) {
+                continue;
+            }
+            nonRepeaterCount++;
             String name = (String) contactNames.elementAt(i);
             if (fq.length() == 0 || name.toLowerCase().indexOf(fq) >= 0) {
                 visibleIndices.addElement(new Integer(i));
@@ -66,7 +74,7 @@ public class ContactsScreen extends List implements CommandListener {
         }
         String title = "Contacts (" + visibleIndices.size();
         if (fq.length() > 0) {
-            title += "/" + contactNames.size() + ")";
+            title += "/" + nonRepeaterCount + ")";
         } else {
             title += ")";
         }

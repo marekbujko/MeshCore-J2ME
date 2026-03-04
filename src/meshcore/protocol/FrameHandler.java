@@ -13,11 +13,13 @@ public final class FrameHandler {
     private final FrameHandlerListener listener;
     private final Vector contactNames;
     private final Vector contactKeys;
+    private final Vector contactTypes;
 
-    public FrameHandler(FrameHandlerListener listener, Vector contactNames, Vector contactKeys) {
+    public FrameHandler(FrameHandlerListener listener, Vector contactNames, Vector contactKeys, Vector contactTypes) {
         this.listener = listener;
         this.contactNames = contactNames;
         this.contactKeys = contactKeys;
+        this.contactTypes = contactTypes;
     }
 
     public void handleFrame(byte[] f) {
@@ -30,6 +32,7 @@ public final class FrameHandler {
         } else if (code == ProtocolConstants.RESP_CONTACTS_START) {
             contactNames.removeAllElements();
             contactKeys.removeAllElements();
+            contactTypes.removeAllElements();
             listener.onContactsStart();
         } else if (code == ProtocolConstants.RESP_CONTACT) {
             handleContact(f);
@@ -104,10 +107,12 @@ public final class FrameHandler {
         if (f.length >= 132) {
             byte[] key = new byte[32];
             System.arraycopy(f, 1, key, 0, 32);
+            int type = f[33] & 0xFF;
             String name = FrameUtils.extractString(f, 100, 32);
             if (name.length() == 0) name = FrameUtils.bytesToHex(key, 0, 3);
             contactKeys.addElement(key);
             contactNames.addElement(name);
+            contactTypes.addElement(new Integer(type));
         }
     }
 

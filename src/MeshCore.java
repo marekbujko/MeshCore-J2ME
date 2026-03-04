@@ -20,6 +20,7 @@ import meshcore.ui.ConnectScreen;
 import meshcore.ui.MainMenuScreen;
 import meshcore.ui.ChannelScreen;
 import meshcore.ui.ContactsScreen;
+import meshcore.ui.RepeatersScreen;
 import meshcore.ui.DMScreen;
 import meshcore.ui.SettingsScreen;
 import meshcore.ui.Alerts;
@@ -28,12 +29,15 @@ import meshcore.ui.Alerts;
  * MeshCore WiFi TCP Client for Nokia Asha 210 (J2ME MIDP 2.0 / CLDC 1.1)
  *
  * Screens:
- *   1. ConnectScreen   - IP/port entry
- *   2. MainMenu        - Channel Chat / Contacts / Settings / Disconnect
- *   3. ChannelScreen   - Public broadcast chat
- *   4. ContactsScreen  - Contact list, tap to open DM
- *   5. DMScreen        - Direct message with a contact
- *   6. SettingsScreen  - Radio params, node name, battery
+ *   1. ConnectScreen    - IP/port entry
+ *   2. MainMenu         - Channels / Contacts / Repeaters / Activity Log / Settings / Disconnect
+ *   3. ChannelListScreen- Channel list selector
+ *   4. ChannelScreen    - Public broadcast chat
+ *   5. ContactsScreen   - Contact list (non-repeaters), tap to open DM
+ *   6. RepeatersScreen  - Repeaters discovered via adverts
+ *   7. DMScreen         - Direct message with a contact
+ *   8. SettingsScreen   - Radio params, node name, battery, stats
+ *   9. ActivityLogScreen- App + protocol event log
  *
  * Protocol: MeshCore Companion Radio binary frame protocol over TCP
  * Reference: https://github.com/meshcore-dev/MeshCore/wiki/Companion-Radio-Protocol
@@ -64,6 +68,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     private Vector contactNames = new Vector();
     private Vector contactKeys = new Vector();
+    private Vector contactTypes = new Vector();
 
     private long nodeFreq = 915000L;
     private long nodeBw = 250L;
@@ -80,6 +85,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private ContactsScreen contactsScreen;
     private DMScreen dmScreen;
     private SettingsScreen settingsScreen;
+    private RepeatersScreen repeatersScreen;
     private ActivityLogScreen activityLogScreen;
 
     private FrameHandler frameHandler;
@@ -97,7 +103,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     // -----------------------------------------------------------------------
     public void startApp() {
         display = Display.getDisplay(this);
-        frameHandler = new FrameHandler(this, contactNames, contactKeys);
+        frameHandler = new FrameHandler(this, contactNames, contactKeys, contactTypes);
         showSplashScreen();
     }
 
@@ -282,8 +288,13 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void showContactsScreen() {
         ensureContactUnreadSize(contactNames.size());
-        contactsScreen = new ContactsScreen(this, contactNames, contactUnreadCount);
+        contactsScreen = new ContactsScreen(this, contactNames, contactUnreadCount, contactTypes);
         display.setCurrent(contactsScreen);
+    }
+
+    public void showRepeatersScreen() {
+        repeatersScreen = new RepeatersScreen(this, contactNames, contactTypes);
+        display.setCurrent(repeatersScreen);
     }
 
     public void showDMScreen(int idx) {
@@ -546,6 +557,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void sendGetContacts() {
+        if (transport == null) return;
         try {
             transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_GET_CONTACTS});
         } catch (IOException e) {
@@ -959,6 +971,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             public void run() {
                 if (display.getCurrent() == contactsScreen) {
                     showContactsScreen();
+                } else if (display.getCurrent() == repeatersScreen) {
+                    showRepeatersScreen();
                 }
             }
         });

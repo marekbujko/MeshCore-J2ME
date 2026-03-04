@@ -18,6 +18,7 @@ public interface AppController {
     void addPrivateChannel(String name, String secretHex);
     void removeChannel(int index);
     void showContactsScreen();
+    void showRepeatersScreen();
     void showDMScreen(int idx);
     void showSettingsScreen();
     void showActivityLogScreen();
