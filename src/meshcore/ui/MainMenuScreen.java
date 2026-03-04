@@ -19,6 +19,7 @@ public class MainMenuScreen extends List implements CommandListener {
     private final Command cmdAdvertFloodRouted;
     private final Command cmdActivityLog;
     private final Command cmdDisconnect;
+    private final Command cmdConnectTo;
     private final Command cmdSettings;
 
     public static final int IDX_NOTIFICATIONS = 0;
@@ -48,6 +49,7 @@ public class MainMenuScreen extends List implements CommandListener {
         cmdAdvertFloodRouted = new Command("Advert • Flood Routed", Command.SCREEN, 1);
         cmdActivityLog = new Command("Activity Log", Command.SCREEN, 2);
         cmdDisconnect = new Command("Disconnect", Command.SCREEN, 3);
+        cmdConnectTo = new Command("Connect To", Command.SCREEN, 3);
         cmdSettings = new Command("Settings", Command.BACK, 4);
         addCommand(cmdAdvertZeroHop);
         addCommand(cmdAdvertFloodRouted);
@@ -61,6 +63,17 @@ public class MainMenuScreen extends List implements CommandListener {
         Image icon = hasNew ? iconNotifNew : iconNotif;
         String label = "Notifications";
         set(IDX_NOTIFICATIONS, label, icon);
+    }
+
+    /** When connected show Disconnect, when not-connected show Connect To. */
+    public void setConnectCommandMode(boolean showConnectTo) {
+        if (showConnectTo) {
+            removeCommand(cmdDisconnect);
+            addCommand(cmdConnectTo);
+        } else {
+            removeCommand(cmdConnectTo);
+            addCommand(cmdDisconnect);
+        }
     }
 
     private static Image loadIcon(String path) {
@@ -84,7 +97,7 @@ public class MainMenuScreen extends List implements CommandListener {
             app.showActivityLogScreen();
             return;
         }
-        if (c == cmdDisconnect) {
+        if (c == cmdDisconnect || c == cmdConnectTo) {
             app.disconnect();
             app.showConnectScreen();
             return;

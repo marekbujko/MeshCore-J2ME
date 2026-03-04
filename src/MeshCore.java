@@ -182,6 +182,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 titleRotationIndex
         );
         menu.setTitle(title);
+        // When not connected (including reconnecting / after give-up), show "Connect To" instead of "Disconnect".
+        menu.setConnectCommandMode(!connected);
     }
 
     private void startTitleRotation() {
