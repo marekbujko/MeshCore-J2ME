@@ -160,7 +160,7 @@ public final class FrameHandler {
     private void handleDeviceTime(byte[] f) {
         if (f.length >= 5) {
             long epoch = FrameTransport.readUint32LE(f, 1);
-            listener.onDeviceTime("Device time: " + epoch + " (epoch)");
+            listener.onDeviceTime("Node time: " + epoch + " (epoch)");
         }
     }
 

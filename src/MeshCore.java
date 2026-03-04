@@ -7,12 +7,19 @@ import java.util.Vector;
 import meshcore.protocol.FrameHandler;
 import meshcore.protocol.FrameHandlerListener;
 import meshcore.protocol.ProtocolConstants;
+import meshcore.protocol.MeshProtocolClient;
 import meshcore.net.FrameTransport;
+import meshcore.net.ConnectionManager;
+import meshcore.util.ActivityLogHelper;
+import meshcore.util.AppConstants;
+import meshcore.util.ChannelStore;
+import meshcore.util.ContactStore;
 import meshcore.util.ConnectStorage;
 import meshcore.util.FrameUtils;
 import meshcore.util.ImageUtils;
 import meshcore.util.ParseUtils;
 import meshcore.util.SHA256;
+import meshcore.util.TextUtils;
 import meshcore.ui.AppController;
 import meshcore.ui.ActivityLogScreen;
 import meshcore.ui.ChannelListScreen;
@@ -24,6 +31,8 @@ import meshcore.ui.RepeatersScreen;
 import meshcore.ui.DMScreen;
 import meshcore.ui.SettingsScreen;
 import meshcore.ui.Alerts;
+import meshcore.ui.NotificationPresenter;
+import meshcore.ui.SettingsPresenter;
 
 /**
  * MeshCore WiFi TCP Client for Nokia Asha 210 (J2ME MIDP 2.0 / CLDC 1.1)
@@ -54,21 +63,14 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private volatile boolean connected = false;
     private volatile boolean running = false;
 
-    private String myName = "NokiaUser";
+    private String myName = "";
     private String nodeName = "";
     private String firmwareVer = "";
     private String nodePublicKeyHex = "";
 
-    private Vector channelNames = new Vector();
-    private Vector channelBuffers = new Vector();
-    private Vector channelUnreadCount = new Vector();
+    private ChannelStore channelStore = new ChannelStore();
+    private ContactStore contactStore = new ContactStore();
     private StringBuffer activityLogBuf = new StringBuffer();
-    private Vector dmBuffers = new Vector();
-    private Vector contactUnreadCount = new Vector();
-
-    private Vector contactNames = new Vector();
-    private Vector contactKeys = new Vector();
-    private Vector contactTypes = new Vector();
 
     private long nodeFreq = 915000L;
     private long nodeBw = 250L;
@@ -94,16 +96,27 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private volatile boolean userRequestedDisconnect = false;
     private volatile boolean reconnectScheduled = false;
     private volatile int titleRotationIndex = 0;
-    private static final int RECONNECT_ATTEMPTS = 5;
-    private static final int RECONNECT_DELAY_MS = 3000;
-    private static final int TITLE_ROTATION_MS = 3000;
+
+    private ConnectionManager connectionManager;
 
     // -----------------------------------------------------------------------
     // MIDlet lifecycle
     // -----------------------------------------------------------------------
     public void startApp() {
         display = Display.getDisplay(this);
-        frameHandler = new FrameHandler(this, contactNames, contactKeys, contactTypes);
+        frameHandler = new FrameHandler(this, contactStore.getNames(), contactStore.getKeys(), contactStore.getTypes());
+        connectionManager = new ConnectionManager(new ConnectionManager.Listener() {
+            public void onFrame(byte[] frame) {
+                frameHandler.handleFrame(frame);
+            }
+            public void onConnectionLost() {
+                if (running) appendActivityLog("[!] Connection lost");
+                MeshCore.this.onConnectionLost();
+            }
+            public void onKeepAliveError(String message) {
+                appendActivityLog(message);
+            }
+        });
         showSplashScreen();
     }
 
@@ -120,7 +133,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         display.setCurrent(ImageUtils.createSplashCanvas(logo));
         new Thread(new Runnable() {
             public void run() {
-                try { Thread.sleep(3500); } catch (InterruptedException ignore) {}
+                try { Thread.sleep(AppConstants.SPLASH_DELAY_MS); } catch (InterruptedException ignore) {}
                 display.callSerially(new Runnable() {
                     public void run() {
                         display.setCurrent(connectScreen);
@@ -131,12 +144,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     private void initChannels() {
-        channelNames.removeAllElements();
-        channelBuffers.removeAllElements();
-        channelUnreadCount.removeAllElements();
-        channelNames.addElement(ChannelListScreen.PUBLIC_CHANNEL);
-        channelBuffers.addElement(new StringBuffer());
-        channelUnreadCount.addElement(new Integer(0));
+        channelStore.initChannels();
     }
 
     public void pauseApp() {}
@@ -162,21 +170,12 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private void updateMainMenuTitle() {
         final MainMenuScreen menu = mainMenuScreen;
         if (menu == null) return;
-        String title;
-        String voltage = (lastBatteryStatus != null && lastBatteryStatus.length() > 0) ? (" " + lastBatteryStatus) : "";
-        if (connected) {
-            int idx = titleRotationIndex % 3;
-            if (idx == 0 || idx == 2) {
-                title = "Connected" + voltage;
-            } else {
-                title = "MeshCore" + voltage;
-            }
-        } else {
-            int idx = titleRotationIndex % 2;
-            title = (idx == 0)
-                ? (reconnectScheduled ? "Reconnecting..." : "Disconnected")
-                : "MeshCore";
-        }
+        String title = TextUtils.computeMainMenuTitle(
+                connected,
+                reconnectScheduled,
+                lastBatteryStatus,
+                titleRotationIndex
+        );
         menu.setTitle(title);
     }
 
@@ -184,7 +183,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         new Thread(new Runnable() {
             public void run() {
                 while (connected && running) {
-                    try { Thread.sleep(TITLE_ROTATION_MS); } catch (InterruptedException e) { return; }
+                    try { Thread.sleep(AppConstants.TITLE_ROTATION_MS); } catch (InterruptedException e) { return; }
                     if (!connected || !running) break;
                     titleRotationIndex++;
                     display.callSerially(new Runnable() {
@@ -204,7 +203,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         new Thread(new Runnable() {
             public void run() {
                 while (!connected && !userRequestedDisconnect) {
-                    try { Thread.sleep(TITLE_ROTATION_MS); } catch (InterruptedException e) { return; }
+                    try { Thread.sleep(AppConstants.TITLE_ROTATION_MS); } catch (InterruptedException e) { return; }
                     if (connected || userRequestedDisconnect) break;
                     titleRotationIndex++;
                     display.callSerially(new Runnable() {
@@ -225,15 +224,15 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void showChannelListScreen() {
-        channelListScreen = new ChannelListScreen(this, channelNames, channelUnreadCount);
+        channelListScreen = new ChannelListScreen(this, channelStore.getNames(), channelStore.getUnreadCounts());
         display.setCurrent(channelListScreen);
     }
 
     public void showChannelScreen(int channelIndex) {
-        if (channelIndex < 0 || channelIndex >= channelBuffers.size()) return;
+        if (channelIndex < 0 || channelIndex >= channelStore.size()) return;
         setChannelUnread(channelIndex, 0);
-        String name = (String) channelNames.elementAt(channelIndex);
-        StringBuffer buf = (StringBuffer) channelBuffers.elementAt(channelIndex);
+        String name = channelStore.getName(channelIndex);
+        StringBuffer buf = channelStore.getBuffer(channelIndex);
         channelScreen = new ChannelScreen(this, channelIndex, name, buf);
         display.setCurrent(channelScreen);
         trySyncMessages();
@@ -244,15 +243,11 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void addChannel(String name, byte[] secretBytes) {
-        for (int i = 0; i < channelNames.size(); i++) {
-            if (name.equalsIgnoreCase((String) channelNames.elementAt(i))) {
-                return;
-            }
+        if (channelStore.containsNameIgnoreCase(name)) {
+            return;
         }
-        channelNames.addElement(name);
-        channelBuffers.addElement(new StringBuffer());
-        channelUnreadCount.addElement(new Integer(0));
-        sendSetChannel(channelNames.size() - 1, name, secretBytes);
+        int idx = channelStore.addChannel(name);
+        sendSetChannel(idx, name, secretBytes);
     }
 
     public void addPrivateChannel(String name, String secretHex) {
@@ -265,11 +260,9 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void removeChannel(int index) {
-        if (index <= 0 || index >= channelNames.size()) return;
+        if (index <= 0 || index >= channelStore.size()) return;
         sendClearChannelSlot(index);
-        channelNames.removeElementAt(index);
-        channelBuffers.removeElementAt(index);
-        channelUnreadCount.removeElementAt(index);
+        channelStore.removeChannel(index);
     }
 
     /** Tell the node to clear this channel slot (empty name + zero secret). */
@@ -287,22 +280,22 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void showContactsScreen() {
-        ensureContactUnreadSize(contactNames.size());
-        contactsScreen = new ContactsScreen(this, contactNames, contactUnreadCount, contactTypes);
+        ensureContactUnreadSize(contactStore.size());
+        contactsScreen = new ContactsScreen(this, contactStore.getNames(), contactStore.getUnreadCounts(), contactStore.getTypes());
         display.setCurrent(contactsScreen);
     }
 
     public void showRepeatersScreen() {
-        repeatersScreen = new RepeatersScreen(this, contactNames, contactTypes);
+        repeatersScreen = new RepeatersScreen(this, contactStore.getNames(), contactStore.getTypes());
         display.setCurrent(repeatersScreen);
     }
 
     public void showDMScreen(int idx) {
-        ensureDmBuffersSize(contactNames.size());
-        ensureContactUnreadSize(contactNames.size());
+        ensureDmBuffersSize(contactStore.size());
+        ensureContactUnreadSize(contactStore.size());
         setContactUnread(idx, 0);
-        String name = (String) contactNames.elementAt(idx);
-        StringBuffer buf = (StringBuffer) dmBuffers.elementAt(idx);
+        String name = contactStore.getName(idx);
+        StringBuffer buf = contactStore.getDmBuffer(idx);
         dmScreen = new DMScreen(this, idx, name, buf);
         display.setCurrent(dmScreen);
         trySyncMessages();
@@ -333,52 +326,13 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         try {
             conn = (StreamConnection) Connector.open("socket://" + host + ":" + port);
             transport = new FrameTransport(conn.openInputStream(), conn.openOutputStream());
-            connected = true;
-            ConnectStorage.save(host, String.valueOf(port));
-            setConnectTitle("Connected");
-            appendActivityLog("[*] Connected");
-            initChannels();
-
-            transport.sendFrame(new byte[]{
-                (byte) ProtocolConstants.CMD_DEVICE_QUERY,
-                (byte) ProtocolConstants.APP_VER
-            });
-
-            byte[] nb = myName.getBytes("UTF-8");
-            byte[] as = new byte[2 + 6 + nb.length];
-            as[0] = (byte) ProtocolConstants.CMD_APP_START;
-            as[1] = (byte) ProtocolConstants.APP_VER;
-            System.arraycopy(nb, 0, as, 8, nb.length);
-            transport.sendFrame(as);
-
-            byte[] st = new byte[5];
-            st[0] = (byte) ProtocolConstants.CMD_SET_DEVICE_TIME;
-            FrameTransport.writeUint32LE(st, 1, getEpoch());
-            transport.sendFrame(st);
-
-            sendGetContacts();
-            sendGetChannels();
-            scheduleChannelsSyncedLog();
-
-            // Kick off initial battery query so main menu shows voltage quickly
-            sendGetBattery();
-
-            running = true;
-            new Thread(new Runnable() {
-                public void run() {
-                    receiveLoop();
-                }
-            }).start();
-
-            startKeepAlive();
-
+            setupConnectedState(host, port, true);
             display.callSerially(new Runnable() {
                 public void run() {
                     showMainMenu();
                     startTitleRotation();
                 }
             });
-
         } catch (Exception e) {
             setConnectTitle("Failed: " + e.getMessage());
             appendActivityLog("[!] Connect failed: " + e.getMessage());
@@ -404,35 +358,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 try {
                     conn = (StreamConnection) Connector.open("socket://" + host + ":" + port);
                     transport = new FrameTransport(conn.openInputStream(), conn.openOutputStream());
-                    connected = true;
-                    ConnectStorage.save(host, String.valueOf(port));
-                    appendActivityLog("[*] Connected");
-                    initChannels();
-                    transport.sendFrame(new byte[]{
-                        (byte) ProtocolConstants.CMD_DEVICE_QUERY,
-                        (byte) ProtocolConstants.APP_VER
-                    });
-                    byte[] nb = myName.getBytes("UTF-8");
-                    byte[] as = new byte[2 + 6 + nb.length];
-                    as[0] = (byte) ProtocolConstants.CMD_APP_START;
-                    as[1] = (byte) ProtocolConstants.APP_VER;
-                    System.arraycopy(nb, 0, as, 8, nb.length);
-                    transport.sendFrame(as);
-                    byte[] st = new byte[5];
-                    st[0] = (byte) ProtocolConstants.CMD_SET_DEVICE_TIME;
-                    FrameTransport.writeUint32LE(st, 1, getEpoch());
-                    transport.sendFrame(st);
-                    sendGetContacts();
-                    sendGetChannels();
-                    scheduleChannelsSyncedLog();
-                    sendGetBattery();
-                    running = true;
-                    new Thread(new Runnable() {
-                        public void run() {
-                            receiveLoop();
-                        }
-                    }).start();
-                    startKeepAlive();
+                    setupConnectedState(host, port, false);
                     status[0] = "Connected";
                     display.callSerially(new Runnable() {
                         public void run() {
@@ -440,7 +366,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                         }
                     });
                     try {
-                        Thread.sleep(1500);
+                        Thread.sleep(AppConstants.POST_CONNECT_DELAY_MS);
                     } catch (InterruptedException ignore) {}
                     display.callSerially(new Runnable() {
                         public void run() {
@@ -464,6 +390,47 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         }).start();
     }
 
+    /** Common initialization sequence after TCP socket + transport are created. */
+    private void setupConnectedState(String host, int port, boolean updateConnectTitle) throws IOException {
+        connected = true;
+        ConnectStorage.save(host, String.valueOf(port));
+        if (updateConnectTitle) {
+            setConnectTitle("Connected");
+        }
+        appendActivityLog("[*] Connected");
+        initChannels();
+
+        transport.sendFrame(new byte[]{
+            (byte) ProtocolConstants.CMD_DEVICE_QUERY,
+            (byte) ProtocolConstants.APP_VER
+        });
+
+        byte[] nb = myName.getBytes("UTF-8");
+        byte[] as = new byte[2 + 6 + nb.length];
+        as[0] = (byte) ProtocolConstants.CMD_APP_START;
+        as[1] = (byte) ProtocolConstants.APP_VER;
+        System.arraycopy(nb, 0, as, 8, nb.length);
+        transport.sendFrame(as);
+
+        byte[] st = new byte[5];
+        st[0] = (byte) ProtocolConstants.CMD_SET_DEVICE_TIME;
+        FrameTransport.writeUint32LE(st, 1, getEpoch());
+        transport.sendFrame(st);
+
+        sendGetContacts();
+        sendGetChannels();
+        scheduleChannelsSyncedLog();
+
+        // Kick off initial battery query so main menu shows voltage quickly
+        sendGetBattery();
+
+        running = true;
+        if (connectionManager != null) {
+            connectionManager.setTransport(transport);
+            connectionManager.startLoops();
+        }
+    }
+
     private void closeConnection() {
         transport = null;
         try {
@@ -472,19 +439,24 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         conn = null;
     }
 
-    public void disconnect() {
-        userRequestedDisconnect = true;
+    /** Shared cleanup for both user-initiated disconnect and unexpected loss. */
+    private void resetConnectionFlags(boolean userInitiated) {
+        userRequestedDisconnect = userInitiated;
         running = false;
         connected = false;
         keepAliveRunning = false;
+        if (connectionManager != null) {
+            connectionManager.stop();
+        }
         closeConnection();
     }
 
+    public void disconnect() {
+        resetConnectionFlags(true);
+    }
+
     private void onConnectionLost() {
-        running = false;
-        connected = false;
-        keepAliveRunning = false;
-        closeConnection();
+        resetConnectionFlags(false);
         display.callSerially(new Runnable() {
             public void run() {
                 if (mainMenuScreen != null) {
@@ -504,14 +476,14 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 try {
                     String[] hp = ConnectStorage.loadHostAndPort();
                     int port = ParseUtils.parseInt(hp[1], 5000);
-                    for (int attempt = 0; attempt < RECONNECT_ATTEMPTS; attempt++) {
+                    for (int attempt = 0; attempt < AppConstants.RECONNECT_ATTEMPTS; attempt++) {
                         try {
-                            Thread.sleep(RECONNECT_DELAY_MS);
+                            Thread.sleep(AppConstants.RECONNECT_DELAY_MS);
                         } catch (InterruptedException e) { return; }
                         if (userRequestedDisconnect) return;
                         connect(hp[0], port);
                         if (connected) return;
-                        appendActivityLog("[!] Reconnect " + (attempt + 1) + "/" + RECONNECT_ATTEMPTS + " failed");
+                        appendActivityLog("[!] Reconnect " + (attempt + 1) + "/" + AppConstants.RECONNECT_ATTEMPTS + " failed");
                     }
                     appendActivityLog("[!] Reconnect gave up");
                 } finally {
@@ -522,16 +494,9 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void sendChannelMessage(int channelIndex, String msg) {
-        if (channelIndex < 0 || channelIndex >= channelBuffers.size()) return;
+        if (channelIndex < 0 || channelIndex >= channelStore.size()) return;
         try {
-            byte[] tb = msg.getBytes("UTF-8");
-            byte[] f = new byte[7 + tb.length];
-            f[0] = (byte) ProtocolConstants.CMD_SEND_CHANNEL_MSG;
-            f[1] = 0;
-            f[2] = (byte) (channelIndex & 0xFF);
-            FrameTransport.writeUint32LE(f, 3, getEpoch());
-            System.arraycopy(tb, 0, f, 7, tb.length);
-            transport.sendFrame(f);
+            MeshProtocolClient.sendChannelMessage(transport, channelIndex, msg, getEpoch());
             appendChannel(channelIndex, "[me] " + msg);
         } catch (IOException e) {
             appendActivityLog("[!] Send error");
@@ -540,16 +505,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void sendDirectMessage(int idx, String msg) {
         try {
-            byte[] key = (byte[]) contactKeys.elementAt(idx);
-            byte[] tb = msg.getBytes("UTF-8");
-            byte[] f = new byte[13 + tb.length];
-            f[0] = (byte) ProtocolConstants.CMD_SEND_TXT_MSG;
-            f[1] = 0;
-            f[2] = 0;
-            FrameTransport.writeUint32LE(f, 3, getEpoch());
-            System.arraycopy(key, 0, f, 7, 6);
-            System.arraycopy(tb, 0, f, 13, tb.length);
-            transport.sendFrame(f);
+            byte[] key = (byte[]) contactStore.getKeys().elementAt(idx);
+            MeshProtocolClient.sendDirectMessage(transport, key, msg, getEpoch());
             appendDM(idx, "[me] " + msg);
         } catch (IOException e) {
             appendDM(idx, "[!] Send error");
@@ -559,7 +516,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void sendGetContacts() {
         if (transport == null) return;
         try {
-            transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_GET_CONTACTS});
+            MeshProtocolClient.sendGetContacts(transport);
         } catch (IOException e) {
             appendActivityLog("[!] Sync failed");
         }
@@ -567,12 +524,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void sendGetChannels() {
         try {
-            for (int i = 0; i < ProtocolConstants.MAX_CHANNEL_SLOTS; i++) {
-                transport.sendFrame(new byte[]{
-                    (byte) ProtocolConstants.CMD_GET_CHANNEL,
-                    (byte) (i & 0xFF)
-                });
-            }
+            MeshProtocolClient.sendGetChannels(transport);
         } catch (IOException e) {
             appendActivityLog("[!] Get channels failed");
         }
@@ -584,35 +536,17 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void sendSetChannel(int channelIndex, String name, byte[] secretBytes) {
         try {
-            byte[] nb = name.getBytes("UTF-8");
-            if (nb.length > 32) {
-                byte[] trimmed = new byte[32];
-                System.arraycopy(nb, 0, trimmed, 0, 32);
-                nb = trimmed;
-            }
-            byte[] name32 = new byte[32];
-            System.arraycopy(nb, 0, name32, 0, nb.length);
-            byte[] secret = (secretBytes != null && secretBytes.length == 16)
-                ? secretBytes : SHA256.channelSecret(name);
-            byte[] f = new byte[2 + 32 + 16];
-            f[0] = (byte) ProtocolConstants.CMD_SET_CHANNEL;
-            f[1] = (byte) (channelIndex & 0xFF);
-            System.arraycopy(name32, 0, f, 2, 32);
-            System.arraycopy(secret, 0, f, 34, 16);
-            transport.sendFrame(f);
+            MeshProtocolClient.sendSetChannel(transport, channelIndex, name, secretBytes);
         } catch (Exception e) {
             appendActivityLog("[!] Set channel failed");
         }
     }
 
     public void removeContact(int idx) {
-        if (idx < 0 || idx >= contactKeys.size()) return;
+        if (idx < 0 || idx >= contactStore.getKeys().size()) return;
         try {
-            byte[] key = (byte[]) contactKeys.elementAt(idx);
-            byte[] f = new byte[1 + 32];
-            f[0] = (byte) ProtocolConstants.CMD_REMOVE_CONTACT;
-            System.arraycopy(key, 0, f, 1, 32);
-            transport.sendFrame(f);
+            byte[] key = (byte[]) contactStore.getKeys().elementAt(idx);
+            MeshProtocolClient.removeContact(transport, key);
             sendGetContacts();
         } catch (IOException e) {
             appendActivityLog("[!] Remove failed");
@@ -621,29 +555,19 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void sendRefreshSettings() {
         try {
-            transport.sendFrame(new byte[]{
-                (byte) ProtocolConstants.CMD_DEVICE_QUERY,
-                (byte) ProtocolConstants.APP_VER
-            });
-            byte[] nb = myName.getBytes("UTF-8");
-            byte[] as = new byte[2 + 6 + nb.length];
-            as[0] = (byte) ProtocolConstants.CMD_APP_START;
-            as[1] = (byte) ProtocolConstants.APP_VER;
-            System.arraycopy(nb, 0, as, 8, nb.length);
-            transport.sendFrame(as);
-            transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_GET_BATT_STORAGE});
+            MeshProtocolClient.sendRefreshSettings(transport, myName);
         } catch (IOException ignore) {}
     }
 
     public void sendGetBattery() {
         try {
-            transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_GET_BATT_STORAGE});
+            MeshProtocolClient.sendGetBattery(transport);
         } catch (IOException ignore) {}
     }
 
     public void sendGetStats() {
         try {
-            transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_GET_STATS, 0});
+            MeshProtocolClient.sendGetStats(transport);
         } catch (IOException e) {
             appendActivityLog("[!] Stats failed");
         }
@@ -651,7 +575,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void sendGetDeviceTime() {
         try {
-            transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_GET_DEVICE_TIME});
+            MeshProtocolClient.sendGetDeviceTime(transport);
         } catch (IOException e) {
             appendActivityLog("[!] Time failed");
         }
@@ -659,10 +583,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void sendAdvert() {
         try {
-            int t = (advertType == ProtocolConstants.ADVERT_ZERO_HOP)
-                ? ProtocolConstants.ADVERT_ZERO_HOP : ProtocolConstants.ADVERT_FLOOD;
-            byte[] f = {(byte) ProtocolConstants.CMD_SEND_SELF_ADVERT, (byte) t};
-            transport.sendFrame(f);
+            int t = MeshProtocolClient.sendAdvert(transport, advertType);
             String kind = (t == ProtocolConstants.ADVERT_ZERO_HOP) ? "Zero Hop" : "Flood Routed";
             appendActivityLog("[*] Advert sent (" + kind + ")");
         } catch (IOException ignore) {}
@@ -682,7 +603,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         new Thread(new Runnable() {
             public void run() {
                 try {
-                    transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_SYNC_NEXT_MESSAGE});
+                    MeshProtocolClient.sendSyncNextMessage(transport);
                 } catch (IOException ignore) {}
             }
         }).start();
@@ -699,21 +620,22 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 transport.sendFrame(f);
                 nodeName = newName;
             }
-            nodeFreq = ParseUtils.parseFreqBw(settingsScreen.getFreq(), nodeFreq);
-            nodeBw = ParseUtils.parseFreqBw(settingsScreen.getBw(), nodeBw);
-            nodeSf = ParseUtils.parseInt(settingsScreen.getSf(), nodeSf);
-            nodeCr = ParseUtils.parseInt(settingsScreen.getCr(), nodeCr);
-            nodeTxPwr = ParseUtils.parseInt(settingsScreen.getTxPwr(), nodeTxPwr);
-
-            byte[] rp = new byte[11];
-            rp[0] = (byte) ProtocolConstants.CMD_SET_RADIO_PARAMS;
-            FrameTransport.writeUint32LE(rp, 1, nodeFreq);
-            FrameTransport.writeUint32LE(rp, 5, nodeBw);
-            rp[9] = (byte) nodeSf;
-            rp[10] = (byte) nodeCr;
-            transport.sendFrame(rp);
-
-            transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_SET_RADIO_TX_PWR, (byte) nodeTxPwr});
+            long[] vals = MeshProtocolClient.applySettingsAndBuildRadioFrames(
+                    new MeshProtocolClient.SettingsScreenLike() {
+                        public String getFreq() { return settingsScreen.getFreq(); }
+                        public String getBw()   { return settingsScreen.getBw(); }
+                        public String getSf()   { return settingsScreen.getSf(); }
+                        public String getCr()   { return settingsScreen.getCr(); }
+                        public String getTxPwr(){ return settingsScreen.getTxPwr(); }
+                    },
+                    nodeFreq, nodeBw, nodeSf, nodeCr, nodeTxPwr,
+                    transport
+            );
+            nodeFreq = vals[0];
+            nodeBw   = vals[1];
+            nodeSf   = (int) vals[2];
+            nodeCr   = (int) vals[3];
+            nodeTxPwr= (int) vals[4];
             appendActivityLog("[*] Settings saved");
             final SettingsScreen set = settingsScreen;
             display.callSerially(new Runnable() {
@@ -730,16 +652,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void appendChannel(final int channelIndex, final String line) {
-        int idx = channelIndex;
-        if (idx < 0 || idx >= channelBuffers.size()) idx = 0;
-        StringBuffer buf = (StringBuffer) channelBuffers.elementAt(idx);
-        buf.append(line).append("\n");
-        if (buf.length() > 2000) {
-            buf.delete(0, buf.length() - 2000);
-        }
+        channelStore.appendLine(channelIndex, line);
         final ChannelScreen ch = channelScreen;
-        final int chIdx = idx;
-        final String chName = idx < channelNames.size() ? (String) channelNames.elementAt(idx) : "#" + idx;
+        final int chIdx = (channelIndex < 0 || channelIndex >= channelStore.size()) ? 0 : channelIndex;
+        final String chName = chIdx < channelStore.size() ? channelStore.getName(chIdx) : ("#" + chIdx);
         display.callSerially(new Runnable() {
             public void run() {
                 if (ch != null && display.getCurrent() == ch && ch.getChannelIndex() == chIdx) {
@@ -754,26 +670,11 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void appendActivityLog(final String line) {
-        activityLogBuf.append(line).append("\n");
-        if (activityLogBuf.length() > 2000) {
-            activityLogBuf.delete(0, activityLogBuf.length() - 2000);
-        }
-        final ActivityLogScreen act = activityLogScreen;
-        display.callSerially(new Runnable() {
-            public void run() {
-                if (act != null) act.refreshLog();
-            }
-        });
+        ActivityLogHelper.append(activityLogBuf, line, activityLogScreen, display);
     }
 
     public void appendDM(final int contactIdx, final String line) {
-        if (contactIdx < 0) return;
-        ensureDmBuffersSize(contactIdx + 1);
-        StringBuffer buf = (StringBuffer) dmBuffers.elementAt(contactIdx);
-        buf.append(line).append("\n");
-        if (buf.length() > 2000) {
-            buf.delete(0, buf.length() - 2000);
-        }
+        contactStore.appendDmLine(contactIdx, line);
         final DMScreen dm = dmScreen;
         final int cIdx = contactIdx;
         display.callSerially(new Runnable() {
@@ -783,7 +684,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 } else {
                     incContactUnread(cIdx);
                     refreshContactsListIfShown();
-                    String from = extractDMSender(line);
+                    String from = TextUtils.extractDMSender(line);
                     showIncomingNotification("New DM" + (from.length() > 0 ? " from " + from : ""));
                 }
             }
@@ -791,43 +692,27 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     private void ensureDmBuffersSize(int size) {
-        while (dmBuffers.size() < size) {
-            dmBuffers.addElement(new StringBuffer());
-        }
-    }
-
-    private void ensureChannelUnreadSize(int size) {
-        while (channelUnreadCount.size() < size) {
-            channelUnreadCount.addElement(new Integer(0));
-        }
+        contactStore.ensureDmSize(size);
     }
 
     private void ensureContactUnreadSize(int size) {
-        while (contactUnreadCount.size() < size) {
-            contactUnreadCount.addElement(new Integer(0));
-        }
+        contactStore.ensureUnreadSize(size);
     }
 
     private void incChannelUnread(int idx) {
-        ensureChannelUnreadSize(idx + 1);
-        int n = ((Integer) channelUnreadCount.elementAt(idx)).intValue();
-        channelUnreadCount.setElementAt(new Integer(n + 1), idx);
+        channelStore.incUnread(idx);
     }
 
     private void setChannelUnread(int idx, int val) {
-        ensureChannelUnreadSize(idx + 1);
-        channelUnreadCount.setElementAt(new Integer(val), idx);
+        channelStore.setUnread(idx, val);
     }
 
     private void incContactUnread(int idx) {
-        ensureContactUnreadSize(idx + 1);
-        int n = ((Integer) contactUnreadCount.elementAt(idx)).intValue();
-        contactUnreadCount.setElementAt(new Integer(n + 1), idx);
+        contactStore.incUnread(idx);
     }
 
     private void setContactUnread(int idx, int val) {
-        ensureContactUnreadSize(idx + 1);
-        contactUnreadCount.setElementAt(new Integer(val), idx);
+        contactStore.setUnread(idx, val);
     }
 
     private void refreshChannelListIfShown() {
@@ -844,54 +729,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         }
     }
 
-    private static String extractDMSender(String line) {
-        int s = line.indexOf('[');
-        int e = (s >= 0) ? line.indexOf(']', s) : -1;
-        return (s >= 0 && e > s) ? line.substring(s + 1, e) : "";
-    }
-
     private void showIncomingNotification(String message) {
-        Displayable current = display.getCurrent();
-        if (current == null) return;
-        try {
-            String safe = sanitizeAlertMessage(message, 60);
-            Alerts.show(display, current, "Message", safe,
-                    AlertType.INFO, 2000);
-        } catch (Exception e) {
-            /* Nokia S40 can throw on Alert with empty/long/special chars */
-        }
-    }
-
-    private void startKeepAlive() {
-        keepAliveRunning = true;
-        new Thread(new Runnable() {
-            public void run() {
-                while (keepAliveRunning) {
-                    try {
-                        Thread.sleep(15000);
-                    } catch (InterruptedException ignore) {}
-                    if (!keepAliveRunning || !running || !connected || transport == null) continue;
-                    try {
-                        byte[] cmd = {(byte) ProtocolConstants.CMD_GET_BATT_STORAGE};
-                        transport.sendFrame(cmd);
-                    } catch (IOException e) {
-                        appendActivityLog("[!] Keepalive failed");
-                        onConnectionLost();
-                    }
-                }
-            }
-        }).start();
-    }
-
-    private static String sanitizeAlertMessage(String s, int maxLen) {
-        if (s == null || s.length() == 0) return "New message";
-        StringBuffer sb = new StringBuffer();
-        int len = Math.min(s.length(), maxLen);
-        for (int i = 0; i < len; i++) {
-            char c = s.charAt(i);
-            if (c >= 32 && c < 127) sb.append(c);
-        }
-        return sb.length() > 0 ? sb.toString() : "New message";
+        NotificationPresenter.showIncoming(display, display.getCurrent(), message);
     }
 
     private void setConnectTitle(final String t) {
@@ -900,27 +739,6 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 if (connectScreen != null) connectScreen.setTitle(t);
             }
         });
-    }
-
-    // -----------------------------------------------------------------------
-    // Receive loop
-    // -----------------------------------------------------------------------
-    private void receiveLoop() {
-        try {
-            while (running && connected) {
-                byte[] frame = transport.readFrame();
-                if (frame != null && frame.length > 0) {
-                    frameHandler.handleFrame(frame);
-                }
-            }
-        } catch (IOException e) {
-            if (running) appendActivityLog("[!] Connection lost");
-            onConnectionLost();
-            return;
-        }
-        connected = false;
-        running = false;
-        keepAliveRunning = false;
     }
 
     // -----------------------------------------------------------------------
@@ -981,13 +799,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void onChannelInfo(final int chIdx, final String name) {
         display.callSerially(new Runnable() {
             public void run() {
-                while (channelNames.size() <= chIdx) {
-                    channelNames.addElement(chIdx == 0 ? ChannelListScreen.PUBLIC_CHANNEL : "");
-                    channelBuffers.addElement(new StringBuffer());
-                    channelUnreadCount.addElement(new Integer(0));
-                }
-                channelNames.setElementAt(name, chIdx);
-                ensureChannelUnreadSize(channelNames.size());
+                channelStore.ensureSlot(chIdx);
+                channelStore.getNames().setElementAt(name, chIdx);
             }
         });
     }
@@ -996,8 +809,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private void scheduleChannelsSyncedLog() {
         new Thread(new Runnable() {
             public void run() {
-                try { Thread.sleep(2000); } catch (InterruptedException e) { return; }
-                final int n = channelNames.size();
+                try { Thread.sleep(AppConstants.CHANNELS_SYNCED_LOG_DELAY_MS); } catch (InterruptedException e) { return; }
+                final int n = channelStore.size();
                 display.callSerially(new Runnable() {
                     public void run() {
                         appendActivityLog("[*] Channels synced: " + n);
@@ -1009,34 +822,19 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void onBatteryUpdate(final String info) {
         final SettingsScreen set = settingsScreen;
-        final String status = formatBatteryStatus(info);
-        lastBatteryStatus = status;
+        lastBatteryStatus = SettingsPresenter.handleBatteryUpdate(set, info);
         display.callSerially(new Runnable() {
             public void run() {
-                if (set != null) set.setBattInfo(info);
+                // Battery UI already updated in presenter; nothing else to do here.
             }
         });
-    }
-
-    private static String formatBatteryStatus(String info) {
-        if (info == null) return "";
-        int p1 = info.indexOf('(');
-        int p2 = (p1 >= 0) ? info.indexOf(')', p1) : -1;
-        if (p1 >= 0 && p2 > p1) {
-            return info.substring(p1, p2 + 1).trim(); // e.g. "(4.18V)"
-        }
-        int m = info.indexOf("mV");
-        if (m > 0) {
-            return info.substring(0, m + 2).trim(); // e.g. "4100mV"
-        }
-        return "";
     }
 
     public void onStats(final String title, final String content) {
         final SettingsScreen set = settingsScreen;
         display.callSerially(new Runnable() {
             public void run() {
-                if (set != null) set.showInfo(title, content);
+                SettingsPresenter.showStats(set, title, content);
             }
         });
     }
@@ -1045,26 +843,14 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         final SettingsScreen set = settingsScreen;
         display.callSerially(new Runnable() {
             public void run() {
-                if (set != null) set.showInfo("Device Time", content);
+                SettingsPresenter.showDeviceTime(set, content);
             }
         });
     }
 
     public void onError(int code) {
-        String msg = getErrorCodeMessage(code);
+        String msg = TextUtils.getErrorCodeMessage(code);
         appendActivityLog("[!] Error " + code + (msg != null ? " (" + msg + ")" : ""));
-    }
-
-    private static String getErrorCodeMessage(int code) {
-        switch (code) {
-            case ProtocolConstants.ERR_UNSUPPORTED_CMD: return "unsupported command";
-            case ProtocolConstants.ERR_NOT_FOUND:       return "not found";
-            case ProtocolConstants.ERR_TABLE_FULL:      return "table full";
-            case ProtocolConstants.ERR_BAD_STATE:        return "bad state";
-            case ProtocolConstants.ERR_FILE_IO:         return "file I/O error";
-            case ProtocolConstants.ERR_ILLEGAL_ARG:      return "illegal argument";
-            default: return null;
-        }
     }
 
     public boolean isContactsScreenCurrent() {
