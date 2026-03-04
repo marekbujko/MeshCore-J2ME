@@ -28,6 +28,7 @@ import meshcore.ui.MainMenuScreen;
 import meshcore.ui.ChannelScreen;
 import meshcore.ui.ContactsScreen;
 import meshcore.ui.RepeatersScreen;
+import meshcore.ui.NotificationsScreen;
 import meshcore.ui.DMScreen;
 import meshcore.ui.SettingsScreen;
 import meshcore.ui.Alerts;
@@ -85,6 +86,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private ChannelListScreen channelListScreen;
     private ChannelScreen channelScreen;
     private ContactsScreen contactsScreen;
+    private NotificationsScreen notificationsScreen;
     private DMScreen dmScreen;
     private SettingsScreen settingsScreen;
     private RepeatersScreen repeatersScreen;
@@ -96,6 +98,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private volatile boolean userRequestedDisconnect = false;
     private volatile boolean reconnectScheduled = false;
     private volatile int titleRotationIndex = 0;
+    private volatile boolean notificationBlinkRunning = false;
 
     private ConnectionManager connectionManager;
 
@@ -161,7 +164,9 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void showMainMenu() {
-        mainMenuScreen = new MainMenuScreen(this);
+        if (mainMenuScreen == null) {
+            mainMenuScreen = new MainMenuScreen(this);
+        }
         updateMainMenuTitle();
         display.setCurrent(mainMenuScreen);
     }
@@ -315,6 +320,15 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void showActivityLogScreen() {
         activityLogScreen = new ActivityLogScreen(this, activityLogBuf);
         display.setCurrent(activityLogScreen);
+    }
+
+    public void showNotificationsScreen() {
+        notificationsScreen = new NotificationsScreen(
+                this,
+                channelStore.getNames(), channelStore.getUnreadCounts(),
+                contactStore.getNames(), contactStore.getUnreadCounts()
+        );
+        display.setCurrent(notificationsScreen);
     }
 
     // -----------------------------------------------------------------------
@@ -664,6 +678,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                     incChannelUnread(chIdx);
                     refreshChannelListIfShown();
                     showIncomingNotification("New message in " + chName);
+                    updateNotificationBell();
                 }
             }
         });
@@ -686,6 +701,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                     refreshContactsListIfShown();
                     String from = TextUtils.extractDMSender(line);
                     showIncomingNotification("New DM" + (from.length() > 0 ? " from " + from : ""));
+                    updateNotificationBell();
                 }
             }
         });
@@ -701,18 +717,22 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     private void incChannelUnread(int idx) {
         channelStore.incUnread(idx);
+        updateNotificationBell();
     }
 
     private void setChannelUnread(int idx, int val) {
         channelStore.setUnread(idx, val);
+        updateNotificationBell();
     }
 
     private void incContactUnread(int idx) {
         contactStore.incUnread(idx);
+        updateNotificationBell();
     }
 
     private void setContactUnread(int idx, int val) {
         contactStore.setUnread(idx, val);
+        updateNotificationBell();
     }
 
     private void refreshChannelListIfShown() {
@@ -731,6 +751,65 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     private void showIncomingNotification(String message) {
         NotificationPresenter.showIncoming(display, display.getCurrent(), message);
+    }
+
+    private boolean hasAnyUnread() {
+        Vector chUnread = channelStore.getUnreadCounts();
+        for (int i = 0; i < chUnread.size(); i++) {
+            if (((Integer) chUnread.elementAt(i)).intValue() > 0) return true;
+        }
+        Vector cUnread = contactStore.getUnreadCounts();
+        for (int i = 0; i < cUnread.size(); i++) {
+            if (((Integer) cUnread.elementAt(i)).intValue() > 0) return true;
+        }
+        return false;
+    }
+
+    private void updateNotificationBell() {
+        if (mainMenuScreen == null) return;
+        boolean hasNew = hasAnyUnread();
+        if (!hasNew) {
+            notificationBlinkRunning = false;
+            mainMenuScreen.setNotificationHasNew(false);
+        } else if (!notificationBlinkRunning) {
+            notificationBlinkRunning = true;
+            startNotificationBlinker();
+        }
+        if (notificationsScreen != null && display.getCurrent() == notificationsScreen) {
+            notificationsScreen.refreshList();
+        }
+    }
+
+    private void startNotificationBlinker() {
+        new Thread(new Runnable() {
+            public void run() {
+                boolean showNew = true;
+                while (notificationBlinkRunning && hasAnyUnread()) {
+                    final boolean currentShowNew = showNew;
+                    display.callSerially(new Runnable() {
+                        public void run() {
+                            if (mainMenuScreen != null) {
+                                mainMenuScreen.setNotificationHasNew(currentShowNew);
+                            }
+                        }
+                    });
+                    try {
+                        Thread.sleep(AppConstants.NOTIFICATION_BLINK_INTERVAL_MS);
+                    } catch (InterruptedException e) {
+                        break;
+                    }
+                    showNew = !showNew;
+                }
+                notificationBlinkRunning = false;
+                display.callSerially(new Runnable() {
+                    public void run() {
+                        if (mainMenuScreen != null) {
+                            mainMenuScreen.setNotificationHasNew(false);
+                        }
+                    }
+                });
+            }
+        }).start();
     }
 
     private void setConnectTitle(final String t) {
@@ -787,10 +866,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void onContactsEnd() {
         display.callSerially(new Runnable() {
             public void run() {
-                if (display.getCurrent() == contactsScreen) {
-                    showContactsScreen();
-                } else if (display.getCurrent() == repeatersScreen) {
-                    showRepeatersScreen();
+                if (display.getCurrent() == contactsScreen && contactsScreen != null) {
+                    contactsScreen.refreshList();
+                } else if (display.getCurrent() == repeatersScreen && repeatersScreen != null) {
+                    repeatersScreen.refreshList();
                 }
             }
         });

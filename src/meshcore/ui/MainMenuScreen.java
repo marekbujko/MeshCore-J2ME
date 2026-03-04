@@ -21,16 +21,26 @@ public class MainMenuScreen extends List implements CommandListener {
     private final Command cmdDisconnect;
     private final Command cmdSettings;
 
-    public static final int IDX_CHANNEL = 0;
-    public static final int IDX_CONTACTS = 1;
-    public static final int IDX_REPEATERS = 2;
+    public static final int IDX_NOTIFICATIONS = 0;
+    public static final int IDX_CHANNEL = 1;
+    public static final int IDX_CONTACTS = 2;
+    public static final int IDX_REPEATERS = 3;
+
+    private final Image iconChannels;
+    private final Image iconContacts;
+    private final Image iconRepeaters;
+    private final Image iconNotif;
+    private final Image iconNotifNew;
 
     public MainMenuScreen(AppController app) {
         super("MeshCore", List.IMPLICIT);
         this.app = app;
-        Image iconChannels = loadIcon("/channels.png");
-        Image iconContacts = loadIcon("/contacts.png");
-        Image iconRepeaters = loadIcon("/repeaters.png");
+        iconChannels = loadIcon("/channels.png");
+        iconContacts = loadIcon("/contacts.png");
+        iconRepeaters = loadIcon("/repeaters.png");
+        iconNotif = loadIcon("/notification-bell.png");
+        iconNotifNew = loadIcon("/notification-bell-new.png");
+        append("Notifications", iconNotif != null ? iconNotif : null);
         append("Channels", iconChannels);
         append("Contacts / DM", iconContacts);
         append("Repeaters", iconRepeaters);
@@ -45,6 +55,12 @@ public class MainMenuScreen extends List implements CommandListener {
         addCommand(cmdDisconnect);
         addCommand(cmdSettings);
         setCommandListener(this);
+    }
+
+    public void setNotificationHasNew(boolean hasNew) {
+        Image icon = hasNew ? iconNotifNew : iconNotif;
+        String label = "Notifications";
+        set(IDX_NOTIFICATIONS, label, icon);
     }
 
     private static Image loadIcon(String path) {
@@ -82,19 +98,11 @@ public class MainMenuScreen extends List implements CommandListener {
             if (idx == IDX_CHANNEL) {
                 app.showChannelListScreen();
             } else if (idx == IDX_CONTACTS) {
-                new Thread(new Runnable() {
-                    public void run() {
-                        app.sendGetContacts();
-                    }
-                }).start();
                 app.showContactsScreen();
             } else if (idx == IDX_REPEATERS) {
-                new Thread(new Runnable() {
-                    public void run() {
-                        app.sendGetContacts();
-                    }
-                }).start();
                 app.showRepeatersScreen();
+            } else if (idx == IDX_NOTIFICATIONS) {
+                app.showNotificationsScreen();
             }
         }
     }

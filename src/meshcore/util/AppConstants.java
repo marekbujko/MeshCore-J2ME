@@ -17,5 +17,6 @@ public final class AppConstants {
     public static final int NOTIFICATION_DURATION_MS = 2000;
 
     public static final int MAX_BUFFER_LENGTH = 2000;
+    public static final int NOTIFICATION_BLINK_INTERVAL_MS = 750;
 }
 

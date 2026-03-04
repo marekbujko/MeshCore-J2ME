@@ -20,6 +20,7 @@ public interface AppController {
     void showContactsScreen();
     void showRepeatersScreen();
     void showDMScreen(int idx);
+    void showNotificationsScreen();
     void showSettingsScreen();
     void showActivityLogScreen();
 
