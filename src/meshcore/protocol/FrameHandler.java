@@ -4,6 +4,7 @@ import java.util.Vector;
 
 import meshcore.net.FrameTransport;
 import meshcore.util.FrameUtils;
+import meshcore.util.TextUtils;
 
 /**
  * Parses incoming protocol frames and dispatches to listener.
@@ -14,12 +15,14 @@ public final class FrameHandler {
     private final Vector contactNames;
     private final Vector contactKeys;
     private final Vector contactTypes;
+    private final Vector contactPathHops;
 
-    public FrameHandler(FrameHandlerListener listener, Vector contactNames, Vector contactKeys, Vector contactTypes) {
+    public FrameHandler(FrameHandlerListener listener, Vector contactNames, Vector contactKeys, Vector contactTypes, Vector contactPathHops) {
         this.listener = listener;
         this.contactNames = contactNames;
         this.contactKeys = contactKeys;
         this.contactTypes = contactTypes;
+        this.contactPathHops = contactPathHops;
     }
 
     public void handleFrame(byte[] f) {
@@ -33,6 +36,7 @@ public final class FrameHandler {
             contactNames.removeAllElements();
             contactKeys.removeAllElements();
             contactTypes.removeAllElements();
+            contactPathHops.removeAllElements();
             listener.onContactsStart();
         } else if (code == ProtocolConstants.RESP_CONTACT) {
             handleContact(f);
@@ -48,6 +52,7 @@ public final class FrameHandler {
             listener.trySyncMessages();
         } else if (code == ProtocolConstants.PUSH_SEND_CONFIRMED) {
             listener.appendActivityLog("[*] Delivered!");
+            listener.onMessageDelivered();
         } else if (code == ProtocolConstants.PUSH_ADVERT || code == ProtocolConstants.PUSH_PATH_UPDATED) {
             new Thread(new Runnable() {
                 public void run() {
@@ -108,11 +113,14 @@ public final class FrameHandler {
             byte[] key = new byte[32];
             System.arraycopy(f, 1, key, 0, 32);
             int type = f[33] & 0xFF;
+            int outPathLen = f.length >= 36 ? (byte) f[35] : 0;
+            int hops = (outPathLen > 0 && outPathLen <= 64) ? outPathLen : 0;
             String name = FrameUtils.extractString(f, 100, 32);
             if (name.length() == 0) name = FrameUtils.bytesToHex(key, 0, 3);
             contactKeys.addElement(key);
             contactNames.addElement(name);
             contactTypes.addElement(new Integer(type));
+            contactPathHops.addElement(new Integer(hops));
         }
     }
 
@@ -124,7 +132,10 @@ public final class FrameHandler {
     private void handleChannelMessage(byte[] f, int code) {
         int chIdx = (code == ProtocolConstants.RESP_CHANNEL_MSG_V3) ? (f[4] & 0xFF) : (f[1] & 0xFF);
         int off = (code == ProtocolConstants.RESP_CHANNEL_MSG_V3) ? 11 : 8;
-        listener.appendChannel(chIdx, "[CH] " + FrameUtils.extractVarchar(f, off));
+        String text = FrameUtils.extractVarchar(f, off);
+        // Preserve any leading "[sender]" prefix from the node so the UI can
+        // treat it as a sender label above the bubble, not inside it.
+        listener.appendChannel(chIdx, TextUtils.escapeNewlines(text));
         listener.trySyncMessages();
     }
 
@@ -138,7 +149,7 @@ public final class FrameHandler {
         int idx = findContactIndexByPrefix(f, pkOff);
         String sender = (idx >= 0) ? (String) contactNames.elementAt(idx) : FrameUtils.bytesToHex(f, pkOff, 3);
         String text = FrameUtils.extractVarchar(f, textOff);
-        listener.appendDM(idx, "[" + sender + "] " + text);
+        listener.appendDM(idx, "[" + sender + "] " + TextUtils.escapeNewlines(text));
         listener.appendActivityLog("[DM from " + sender + "]");
         listener.trySyncMessages();
     }

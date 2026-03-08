@@ -24,6 +24,8 @@ public interface AppController {
     void showSettingsScreen();
     void showActivityLogScreen();
 
+    void showMessageSettingsScreen();
+
     void connect(String host, int port);
     void connectWithSplash(String host, int port);
     void disconnect();
@@ -31,6 +33,7 @@ public interface AppController {
     void sendDirectMessage(int idx, String msg);
     void sendGetContacts();
     void removeContact(int idx);
+    void resetPath(int contactIdx);
     void saveSettings();
     void sendGetBattery();
     void sendRefreshSettings();
@@ -44,4 +47,8 @@ public interface AppController {
     void appendChannel(int channelIndex, String line);
     void appendActivityLog(String line);
     void appendDM(int contactIdx, String line);
+
+    void clearChannelHistory(int channelIndex);
+    void clearDmHistory(int contactIdx);
+    int getContactPathHops(int contactIdx);
 }

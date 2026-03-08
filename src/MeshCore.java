@@ -15,6 +15,8 @@ import meshcore.util.AppConstants;
 import meshcore.util.ChannelStore;
 import meshcore.util.ContactStore;
 import meshcore.util.ConnectStorage;
+import meshcore.util.DmSendHandler;
+import meshcore.util.DmSendManager;
 import meshcore.util.FrameUtils;
 import meshcore.util.ImageUtils;
 import meshcore.util.ParseUtils;
@@ -31,6 +33,7 @@ import meshcore.ui.RepeatersScreen;
 import meshcore.ui.NotificationsScreen;
 import meshcore.ui.DMScreen;
 import meshcore.ui.SettingsScreen;
+import meshcore.ui.MessageSettingsScreen;
 import meshcore.ui.Alerts;
 import meshcore.ui.NotificationPresenter;
 import meshcore.ui.SettingsPresenter;
@@ -52,7 +55,7 @@ import meshcore.ui.SettingsPresenter;
  * Protocol: MeshCore Companion Radio binary frame protocol over TCP
  * Reference: https://github.com/meshcore-dev/MeshCore/wiki/Companion-Radio-Protocol
  */
-public class MeshCore extends MIDlet implements AppController, FrameHandlerListener {
+public class MeshCore extends MIDlet implements AppController, FrameHandlerListener, DmSendHandler {
 
     // -----------------------------------------------------------------------
     // State
@@ -78,7 +81,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private int nodeSf = 10;
     private int nodeCr = 5;
     private int nodeTxPwr = 20;
-    private int advertType = 0; // 0 = Flood, 1 = Zero hop
+    private int advertType = 0; // 0 = Zero hop, 1 = Flood (per protocol)
 
     // Screen references (for UI updates from background threads)
     private ConnectScreen connectScreen;
@@ -101,13 +104,15 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private volatile boolean notificationBlinkRunning = false;
 
     private ConnectionManager connectionManager;
+    private DmSendManager dmSendManager;
 
     // -----------------------------------------------------------------------
     // MIDlet lifecycle
     // -----------------------------------------------------------------------
     public void startApp() {
         display = Display.getDisplay(this);
-        frameHandler = new FrameHandler(this, contactStore.getNames(), contactStore.getKeys(), contactStore.getTypes());
+        dmSendManager = new DmSendManager(this, AppConstants.DM_SEND_MAX_ATTEMPTS, AppConstants.DM_SEND_TIMEOUT_MS);
+        frameHandler = new FrameHandler(this, contactStore.getNames(), contactStore.getKeys(), contactStore.getTypes(), contactStore.getPathHops());
         connectionManager = new ConnectionManager(new ConnectionManager.Listener() {
             public void onFrame(byte[] frame) {
                 frameHandler.handleFrame(frame);
@@ -240,6 +245,9 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         setChannelUnread(channelIndex, 0);
         String name = channelStore.getName(channelIndex);
         StringBuffer buf = channelStore.getBuffer(channelIndex);
+        try {
+            meshcore.util.HistoryStore.loadChannelTailIntoBuffer(channelIndex, buf);
+        } catch (Throwable ignore) {}
         channelScreen = new ChannelScreen(this, channelIndex, name, buf);
         display.setCurrent(channelScreen);
         trySyncMessages();
@@ -303,6 +311,9 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         setContactUnread(idx, 0);
         String name = contactStore.getName(idx);
         StringBuffer buf = contactStore.getDmBuffer(idx);
+        try {
+            meshcore.util.HistoryStore.loadDmTailIntoBuffer(idx, buf);
+        } catch (Throwable ignore) {}
         dmScreen = new DMScreen(this, idx, name, buf);
         display.setCurrent(dmScreen);
         trySyncMessages();
@@ -317,6 +328,11 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 sendGetBattery();
             }
         }).start();
+    }
+
+    public void showMessageSettingsScreen() {
+        MessageSettingsScreen ms = new MessageSettingsScreen(this);
+        display.setCurrent(ms);
     }
 
     public void showActivityLogScreen() {
@@ -513,19 +529,35 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         if (channelIndex < 0 || channelIndex >= channelStore.size()) return;
         try {
             MeshProtocolClient.sendChannelMessage(transport, channelIndex, msg, getEpoch());
-            appendChannel(channelIndex, "[me] " + msg);
+            appendChannel(channelIndex, "[me] " + TextUtils.escapeNewlines(msg));
         } catch (IOException e) {
             appendActivityLog("[!] Send error");
         }
     }
 
     public void sendDirectMessage(int idx, String msg) {
-        try {
-            byte[] key = (byte[]) contactStore.getKeys().elementAt(idx);
-            MeshProtocolClient.sendDirectMessage(transport, key, msg, getEpoch());
-            appendDM(idx, "[me] " + msg);
-        } catch (IOException e) {
+        if (!dmSendManager.send(idx, msg)) {
             appendDM(idx, "[!] Send error");
+        }
+    }
+
+    public void appendSending(int contactIdx, String escapedMessage) {
+        appendDMInternal(contactIdx, "[me] " + escapedMessage, true);
+    }
+
+    public void updateSendingProgress(int contactIdx, int attempt, int maxAttempts) {
+        String status = attempt <= 1 ? AppConstants.DM_STATUS_SENDING : AppConstants.DM_STATUS_SENDING + " " + attempt + "/" + maxAttempts;
+        replaceLastSendingWith(contactIdx, status);
+    }
+
+    public boolean doSend(int contactIdx, String message) {
+        if (transport == null) return false;
+        try {
+            byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
+            MeshProtocolClient.sendDirectMessage(transport, key, message, getEpoch());
+            return true;
+        } catch (IOException e) {
+            return false;
         }
     }
 
@@ -566,6 +598,18 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             sendGetContacts();
         } catch (IOException e) {
             appendActivityLog("[!] Remove failed");
+        }
+    }
+
+    public void resetPath(int contactIdx) {
+        if (transport == null || contactIdx < 0 || contactIdx >= contactStore.getKeys().size()) return;
+        try {
+            byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
+            MeshProtocolClient.sendResetPath(transport, key);
+            appendActivityLog("[*] Path reset for " + contactStore.getName(contactIdx));
+            sendGetContacts();
+        } catch (IOException e) {
+            appendActivityLog("[!] Reset path failed");
         }
     }
 
@@ -668,7 +712,15 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void appendChannel(final int channelIndex, final String line) {
-        channelStore.appendLine(channelIndex, line);
+        String stamped = line;
+        String ts = TextUtils.formatNowDateTime();
+        if (ts != null && ts.length() > 0) {
+            stamped = line + " (" + ts + ")";
+        }
+        channelStore.appendLine(channelIndex, stamped);
+        try {
+            meshcore.util.HistoryStore.appendChannelLine(channelIndex, stamped);
+        } catch (Throwable ignore) {}
         final ChannelScreen ch = channelScreen;
         final int chIdx = (channelIndex < 0 || channelIndex >= channelStore.size()) ? 0 : channelIndex;
         final String chName = chIdx < channelStore.size() ? channelStore.getName(chIdx) : ("#" + chIdx);
@@ -691,7 +743,22 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void appendDM(final int contactIdx, final String line) {
-        contactStore.appendDmLine(contactIdx, line);
+        appendDMInternal(contactIdx, line, false);
+    }
+
+    private void appendDMInternal(final int contactIdx, final String line, boolean fromMe) {
+        String stamped = line;
+        String ts = TextUtils.formatNowDateTime();
+        if (fromMe) {
+            ts = ts + " | " + AppConstants.DM_STATUS_SENDING;
+        }
+        if (ts != null && ts.length() > 0) {
+            stamped = line + " (" + ts + ")";
+        }
+        contactStore.appendDmLine(contactIdx, stamped);
+        try {
+            meshcore.util.HistoryStore.appendDmLine(contactIdx, stamped);
+        } catch (Throwable ignore) {}
         final DMScreen dm = dmScreen;
         final int cIdx = contactIdx;
         display.callSerially(new Runnable() {
@@ -704,6 +771,45 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                     String from = TextUtils.extractDMSender(line);
                     showIncomingNotification("New DM" + (from.length() > 0 ? " from " + from : ""));
                     updateNotificationBell();
+                }
+            }
+        });
+    }
+
+    public void clearChannelHistory(final int channelIndex) {
+        if (channelIndex < 0 || channelIndex >= channelStore.size()) return;
+        try {
+            meshcore.util.HistoryStore.clearChannelHistory(channelIndex);
+        } catch (Throwable ignore) {}
+        StringBuffer buf = channelStore.getBuffer(channelIndex);
+        buf.setLength(0);
+        final ChannelScreen ch = channelScreen;
+        display.callSerially(new Runnable() {
+            public void run() {
+                if (ch != null && display.getCurrent() == ch && ch.getChannelIndex() == channelIndex) {
+                    ch.refreshLog();
+                }
+            }
+        });
+    }
+
+    public int getContactPathHops(int contactIdx) {
+        return contactStore.getPathHopsCount(contactIdx);
+    }
+
+    public void clearDmHistory(final int contactIdx) {
+        if (contactIdx < 0 || contactIdx >= contactStore.size()) return;
+        try {
+            meshcore.util.HistoryStore.clearDmHistory(contactIdx);
+        } catch (Throwable ignore) {}
+        contactStore.ensureDmSize(contactIdx + 1);
+        StringBuffer buf = contactStore.getDmBuffer(contactIdx);
+        buf.setLength(0);
+        final DMScreen dm = dmScreen;
+        display.callSerially(new Runnable() {
+            public void run() {
+                if (dm != null && display.getCurrent() == dm && dm.getContactIdx() == contactIdx) {
+                    dm.refreshLog();
                 }
             }
         });
@@ -872,6 +978,12 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                     contactsScreen.refreshList();
                 } else if (display.getCurrent() == repeatersScreen && repeatersScreen != null) {
                     repeatersScreen.refreshList();
+                } else if (display.getCurrent() == dmScreen && dmScreen != null) {
+                    try {
+                        dmScreen.refreshTitle();
+                    } catch (Throwable t) {
+                        // Nokia can throw InterruptedException in UI lifecycle
+                    }
                 }
             }
         });
@@ -938,10 +1050,86 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         return display.getCurrent() == contactsScreen;
     }
 
+    public void onMessageDelivered() {
+        final int idx = dmSendManager.getPendingContactIdx();
+        if (idx < 0) return;
+        final int attemptCount = dmSendManager.getAttemptCount();
+        dmSendManager.setDeliveryConfirmed(true);
+        dmSendManager.clearPending();
+        replaceLastSendingWith(idx, buildDeliveredStatus(attemptCount));
+    }
+
+    public void onSendFailed(int contactIdx) {
+        replaceLastSendingWith(contactIdx, AppConstants.DM_STATUS_FAILED);
+    }
+
+    private String buildDeliveredStatus(int attemptCount) {
+        if (attemptCount > 1) {
+            return AppConstants.DM_STATUS_DELIVERED + " (" + attemptCount + ")";
+        }
+        return AppConstants.DM_STATUS_DELIVERED;
+    }
+
+    /** Replaces the last "Sending" or "Sending N/M" token in the contact's DM buffer with newStatus. */
+    private void replaceLastSendingWith(int contactIdx, String newStatus) {
+        contactStore.ensureDmSize(contactIdx + 1);
+        final StringBuffer buf = contactStore.getDmBuffer(contactIdx);
+        final String current = buf.toString();
+        final String sending = AppConstants.DM_STATUS_SENDING;
+        final int slen = sending.length();
+        int pos = -1;
+        for (int i = current.length() - slen; i >= 0; i--) {
+            boolean match = true;
+            for (int j = 0; j < slen; j++) {
+                if (current.charAt(i + j) != sending.charAt(j)) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) {
+                pos = i;
+                break;
+            }
+        }
+        if (pos < 0) return;
+        int tokenEnd = pos + slen;
+        int clen = current.length();
+        if (tokenEnd < clen && current.charAt(tokenEnd) == ' ') {
+            tokenEnd++;
+            while (tokenEnd < clen && current.charAt(tokenEnd) >= '0' && current.charAt(tokenEnd) <= '9') tokenEnd++;
+            if (tokenEnd < clen && current.charAt(tokenEnd) == '/') {
+                tokenEnd++;
+                while (tokenEnd < clen && current.charAt(tokenEnd) >= '0' && current.charAt(tokenEnd) <= '9') tokenEnd++;
+            }
+        }
+        final String updated = current.substring(0, pos) + newStatus + current.substring(tokenEnd);
+        buf.setLength(0);
+        buf.append(updated);
+
+        try {
+            meshcore.util.HistoryStore.updateLastDmStatus(contactIdx, AppConstants.DM_STATUS_SENDING, newStatus);
+        } catch (Throwable ignore) {}
+
+        final DMScreen dm = dmScreen;
+        final int cIdx = contactIdx;
+        display.callSerially(new Runnable() {
+            public void run() {
+                if (dm != null && display.getCurrent() == dm && dm.getContactIdx() == cIdx) {
+                    dm.refreshLog();
+                }
+            }
+        });
+    }
+
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
     private int getEpoch() {
         return (int) (System.currentTimeMillis() / 1000L);
+    }
+
+    /** For future options: retry count, timeout; path/flood settings will live elsewhere. */
+    public DmSendManager getDmSendManager() {
+        return dmSendManager;
     }
 }

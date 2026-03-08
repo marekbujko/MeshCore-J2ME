@@ -24,6 +24,9 @@ public class ChannelListScreen extends List implements CommandListener {
     private final Command cmdRemove;
     private final Command cmdBack;
 
+    /** Remember last selected list index so returning from a channel restores position. */
+    private static int lastSelectedIndex = 0;
+
     public ChannelListScreen(AppController app, Vector channelNames, Vector channelUnreadCount) {
         super("Channels", List.IMPLICIT);
         this.app = app;
@@ -39,6 +42,14 @@ public class ChannelListScreen extends List implements CommandListener {
         addCommand(cmdRemove);
         addCommand(cmdBack);
         setCommandListener(this);
+
+        int size = size();
+        if (size > 0) {
+            if (lastSelectedIndex < 0 || lastSelectedIndex >= size) {
+                lastSelectedIndex = 0;
+            }
+            setSelectedIndex(lastSelectedIndex, true);
+        }
     }
 
     private static String trimAll(String s) {
@@ -141,6 +152,7 @@ public class ChannelListScreen extends List implements CommandListener {
         if (c == List.SELECT_COMMAND) {
             int idx = getSelectedIndex();
             if (idx >= 0) {
+                lastSelectedIndex = idx;
                 app.showChannelScreen(idx);
             }
         }

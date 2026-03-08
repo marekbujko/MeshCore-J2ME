@@ -23,4 +23,7 @@ public interface FrameHandlerListener {
 
     boolean isContactsScreenCurrent();
     void showContactsScreen();
+
+    /** Called when the node confirms a message was delivered. */
+    void onMessageDelivered();
 }

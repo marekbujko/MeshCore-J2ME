@@ -28,6 +28,9 @@ public class ContactsScreen extends List implements CommandListener {
     private final Command cmdRefresh;
     private final Command cmdBack;
 
+    /** Remember last selected list index so returning from a DM restores position. */
+    private static int lastSelectedListIndex = 0;
+
     public ContactsScreen(AppController app, Vector contactNames, Vector contactUnreadCount, Vector contactTypes) {
         super("Contacts", List.IMPLICIT);
         this.app = app;
@@ -48,6 +51,14 @@ public class ContactsScreen extends List implements CommandListener {
         addCommand(cmdBack);
         setCommandListener(this);
         refreshList();
+
+        int size = size();
+        if (size > 0) {
+            if (lastSelectedListIndex < 0 || lastSelectedListIndex >= size) {
+                lastSelectedListIndex = 0;
+            }
+            setSelectedIndex(lastSelectedListIndex, true);
+        }
     }
 
     public void refreshList() {
@@ -147,6 +158,7 @@ public class ContactsScreen extends List implements CommandListener {
         if (c == cmdDM || c == List.SELECT_COMMAND) {
             int idx = getSelectedContactIndex();
             if (idx >= 0 && idx < contactNames.size()) {
+                lastSelectedListIndex = getSelectedIndex();
                 app.showDMScreen(idx);
             }
         }

@@ -18,5 +18,24 @@ public final class AppConstants {
 
     public static final int MAX_BUFFER_LENGTH = 2000;
     public static final int NOTIFICATION_BLINK_INTERVAL_MS = 750;
+
+    /** DM send retry (used by DmSendManager). */
+    public static final int DM_SEND_MAX_ATTEMPTS = 3;
+    public static final int DM_SEND_TIMEOUT_MS = 8000;
+
+    /** DM status: "Sending" then "Sending 2/3", "Sending 3/3" etc. */
+    public static final String DM_STATUS_SENDING = "Sending";
+    public static final String DM_STATUS_DELIVERED = "Delivered";
+    public static final String DM_STATUS_FAILED = "Failed";
+
+    /** RMS history caps per conversation. */
+    public static final int HISTORY_MAX_DM_MESSAGES = 10;
+    public static final int HISTORY_MAX_CHANNEL_MESSAGES = 10;
+
+    /** How many recent lines to load into memory when opening a chat. */
+    public static final int HISTORY_MAX_LOADED_LINES = 5;
+
+    /** Warn when history storage exceeds this (KB). Some devices struggle above 32–64 KB. */
+    public static final int HISTORY_STORAGE_WARN_KB = 64;
 }
 

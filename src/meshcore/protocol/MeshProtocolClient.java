@@ -72,6 +72,14 @@ public final class MeshProtocolClient {
         transport.sendFrame(f);
     }
 
+    /** CMD_RESET_PATH: reset out_path for a contact (public key). */
+    public static void sendResetPath(FrameTransport transport, byte[] key) throws IOException {
+        byte[] f = new byte[1 + 32];
+        f[0] = (byte) ProtocolConstants.CMD_RESET_PATH;
+        System.arraycopy(key, 0, f, 1, 32);
+        transport.sendFrame(f);
+    }
+
     public static void sendRefreshSettings(FrameTransport transport, String myName) throws IOException {
         transport.sendFrame(new byte[]{
             (byte) ProtocolConstants.CMD_DEVICE_QUERY,

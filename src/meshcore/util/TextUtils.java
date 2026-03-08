@@ -69,5 +69,106 @@ public final class TextUtils {
                     : "MeshCore";
         }
     }
+
+    public static String escapeNewlines(String s) {
+        if (s == null || s.length() == 0) return s;
+        StringBuffer out = new StringBuffer();
+        int len = s.length();
+        for (int i = 0; i < len; i++) {
+            char c = s.charAt(i);
+            if (c == '\n') {
+                out.append("\\n");
+            } else if (c == '\r') {
+                out.append("\\r");
+            } else {
+                out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
+    public static String unescapeNewlines(String s) {
+        if (s == null || s.length() == 0) return s;
+        StringBuffer out = new StringBuffer();
+        int len = s.length();
+        for (int i = 0; i < len; i++) {
+            char c = s.charAt(i);
+            if (c == '\\' && i + 1 < len) {
+                char n = s.charAt(i + 1);
+                if (n == 'n') {
+                    out.append('\n');
+                    i++;
+                    continue;
+                } else if (n == 'r') {
+                    out.append('\r');
+                    i++;
+                    continue;
+                }
+            }
+            out.append(c);
+        }
+        return out.toString();
+    }
+
+    public static String formatNowDateTime() {
+        long nowMs = System.currentTimeMillis();
+        long totalSeconds = nowMs / 1000L;
+
+        int sec = (int) (totalSeconds % 60L);
+        long totalMinutes = totalSeconds / 60L;
+        int min = (int) (totalMinutes % 60L);
+        long totalHours = totalMinutes / 60L;
+        int hour = (int) (totalHours % 24L);
+        long totalDays = totalHours / 24L;
+
+        int year = 1970;
+        while (true) {
+            int daysInYear = isLeapYear(year) ? 366 : 365;
+            if (totalDays >= daysInYear) {
+                totalDays -= daysInYear;
+                year++;
+            } else {
+                break;
+            }
+        }
+
+        int[] monthDays = new int[]{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+        if (isLeapYear(year)) {
+            monthDays[1] = 29;
+        }
+
+        int month = 0;
+        while (month < 12 && totalDays >= monthDays[month]) {
+            totalDays -= monthDays[month];
+            month++;
+        }
+        int day = (int) totalDays + 1;
+        int monthOneBased = month + 1;
+
+        StringBuffer sb = new StringBuffer();
+        if (day < 10) sb.append('0');
+        sb.append(day).append('/');
+        String[] monthNames = new String[]{
+                "Jan","Feb","Mar","Apr","May","Jun",
+                "Jul","Aug","Sep","Oct","Nov","Dec"
+        };
+        if (monthOneBased >= 1 && monthOneBased <= 12) {
+            sb.append(monthNames[monthOneBased - 1]);
+        } else {
+            sb.append("???");
+        }
+        sb.append(' ');
+        if (hour < 10) sb.append('0');
+        sb.append(hour).append(':');
+        if (min < 10) sb.append('0');
+        sb.append(min);
+        return sb.toString();
+    }
+
+    private static boolean isLeapYear(int year) {
+        if ((year % 4) != 0) return false;
+        if ((year % 100) != 0) return true;
+        return (year % 400) == 0;
+    }
 }
 

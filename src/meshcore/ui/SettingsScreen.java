@@ -6,11 +6,13 @@ import javax.microedition.lcdui.Displayable;
 import javax.microedition.lcdui.Form;
 import javax.microedition.lcdui.StringItem;
 import javax.microedition.lcdui.TextField;
+import javax.microedition.lcdui.Item;
+import javax.microedition.lcdui.ItemCommandListener;
 
 /**
  * Settings screen: node name, radio params, battery.
  */
-public class SettingsScreen extends Form implements CommandListener {
+public class SettingsScreen extends Form implements CommandListener, ItemCommandListener {
 
     private final AppController app;
     private final TextField tfNodeName;
@@ -22,10 +24,12 @@ public class SettingsScreen extends Form implements CommandListener {
     private final StringItem nodeInfoItem;
     private final StringItem keyItem;
     private final StringItem battInfo;
+    private final StringItem msgSettingsItem;
     private final Command cmdSave;
     private final Command cmdRefresh;
     private final Command cmdStats;
     private final Command cmdTime;
+    private final Command cmdMsgSettings;
     private final Command cmdBack;
 
     public SettingsScreen(AppController app, String nodeName, String firmwareVer,
@@ -42,6 +46,16 @@ public class SettingsScreen extends Form implements CommandListener {
         append(nodeInfoItem);
         append(keyItem);
         append(battInfo);
+
+        cmdMsgSettings = new Command("Message settings", Command.SCREEN, 6);
+        addCommand(cmdMsgSettings);
+
+        // Message settings "button" as its own line right after battery
+        msgSettingsItem = new StringItem("Messages:", "Message settings");
+        msgSettingsItem.setDefaultCommand(cmdMsgSettings);
+        msgSettingsItem.setItemCommandListener(this);
+        append(msgSettingsItem);
+
         tfNodeName = new TextField("Name:", nameInit, 20, TextField.ANY);
         append(tfNodeName);
         tfFreq = new TextField("Freq MHz:", formatFreqBw(nodeFreq), 12, TextField.ANY);
@@ -176,6 +190,16 @@ public class SettingsScreen extends Form implements CommandListener {
                 }
             }).start();
             return;
+        }
+        if (c == cmdMsgSettings) {
+            app.showMessageSettingsScreen();
+            return;
+        }
+    }
+
+    public void commandAction(Command c, Item item) {
+        if (item == msgSettingsItem && c == cmdMsgSettings) {
+            app.showMessageSettingsScreen();
         }
     }
 }

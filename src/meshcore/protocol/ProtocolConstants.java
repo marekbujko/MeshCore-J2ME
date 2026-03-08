@@ -17,12 +17,13 @@ public final class ProtocolConstants {
     public static final int CMD_SEND_SELF_ADVERT  = 7;
     public static final int CMD_SET_ADVERT_NAME  = 8;
 
-    /** Advert type: second byte in CMD_SEND_SELF_ADVERT frame */
-    public static final int ADVERT_FLOOD    = 0;
-    public static final int ADVERT_ZERO_HOP = 1;
+    /** Advert type: second byte in CMD_SEND_SELF_ADVERT frame (0 = zero-hop, 1 = flood) */
+    public static final int ADVERT_ZERO_HOP = 0;
+    public static final int ADVERT_FLOOD    = 1;
     public static final int CMD_SYNC_NEXT_MESSAGE = 10;
     public static final int CMD_SET_RADIO_PARAMS  = 11;
     public static final int CMD_SET_RADIO_TX_PWR  = 12;
+    public static final int CMD_RESET_PATH        = 13;
     public static final int CMD_REMOVE_CONTACT    = 15;
     public static final int CMD_GET_CHANNEL       = 31;
     public static final int CMD_SET_CHANNEL       = 32;

@@ -9,6 +9,7 @@ public final class ContactStore {
     private final Vector names = new Vector();
     private final Vector keys = new Vector();
     private final Vector types = new Vector();
+    private final Vector pathHops = new Vector();
     private final Vector dmBuffers = new Vector();
     private final Vector unreadCounts = new Vector();
 
@@ -22,6 +23,16 @@ public final class ContactStore {
 
     public Vector getTypes() {
         return types;
+    }
+
+    public Vector getPathHops() {
+        return pathHops;
+    }
+
+    /** Hop count for contact (0 = direct, >0 = N hops), or -1 if unknown. */
+    public int getPathHopsCount(int index) {
+        if (index < 0 || index >= pathHops.size()) return -1;
+        return ((Integer) pathHops.elementAt(index)).intValue();
     }
 
     public int size() {
