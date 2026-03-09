@@ -135,7 +135,11 @@ public final class FrameHandler {
                 hops = 0;
             }
             String name = FrameUtils.extractString(f, 100, 32);
-            if (name.length() == 0) name = FrameUtils.bytesToHex(key, 0, 3);
+            if (name.length() == 0) {
+                name = FrameUtils.bytesToHex(key, 0, 3);
+            }
+            // Strip unsupported characters (e.g. emojis) so UI can render cleanly.
+            name = TextUtils.sanitizeLabel(name, 32);
             contactKeys.addElement(key);
             contactNames.addElement(name);
             contactTypes.addElement(new Integer(type));
@@ -162,6 +166,7 @@ public final class FrameHandler {
         int chIdx = (code == ProtocolConstants.RESP_CHANNEL_MSG_V3) ? (f[4] & 0xFF) : (f[1] & 0xFF);
         int off = (code == ProtocolConstants.RESP_CHANNEL_MSG_V3) ? 11 : 8;
         String text = FrameUtils.extractVarchar(f, off);
+        text = TextUtils.sanitizeMessage(text, 0);
         // Preserve any leading "[sender]" prefix from the node so the UI can
         // treat it as a sender label above the bubble, not inside it.
         listener.appendChannel(chIdx, TextUtils.escapeNewlines(text));
@@ -178,6 +183,7 @@ public final class FrameHandler {
         int idx = findContactIndexByPrefix(f, pkOff);
         String sender = (idx >= 0) ? (String) contactNames.elementAt(idx) : FrameUtils.bytesToHex(f, pkOff, 3);
         String text = FrameUtils.extractVarchar(f, textOff);
+        text = TextUtils.sanitizeMessage(text, 0);
         listener.appendDM(idx, "[" + sender + "] " + TextUtils.escapeNewlines(text));
         listener.appendActivityLog("[DM from " + sender + "]");
         listener.trySyncMessages();

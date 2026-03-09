@@ -6,13 +6,11 @@ import javax.microedition.lcdui.Displayable;
 import javax.microedition.lcdui.Form;
 import javax.microedition.lcdui.StringItem;
 import javax.microedition.lcdui.TextField;
-import javax.microedition.lcdui.Item;
-import javax.microedition.lcdui.ItemCommandListener;
 
 /**
  * Settings screen: node name, radio params, battery.
  */
-public class SettingsScreen extends Form implements CommandListener, ItemCommandListener {
+public class SettingsScreen extends Form implements CommandListener {
 
     private final AppController app;
     private final TextField tfNodeName;
@@ -24,7 +22,6 @@ public class SettingsScreen extends Form implements CommandListener, ItemCommand
     private final StringItem nodeInfoItem;
     private final StringItem keyItem;
     private final StringItem battInfo;
-    private final StringItem msgSettingsItem;
     private final Command cmdSave;
     private final Command cmdRefresh;
     private final Command cmdStats;
@@ -38,7 +35,7 @@ public class SettingsScreen extends Form implements CommandListener, ItemCommand
         this.app = app;
         String nn = (nodeName != null ? nodeName : "");
         String fw = (firmwareVer != null ? firmwareVer : "");
-        String nameInit = sanitizeForTextField(nn, 20);
+        String nameInit = meshcore.util.TextUtils.sanitizeLabel(nn, 32);
         if (nameInit.length() == 0) nameInit = "Node0";
         nodeInfoItem = new StringItem("Node:", nn + " " + fw);
         keyItem = new StringItem("Public key:", formatPublicKey(nodePublicKeyHex));
@@ -47,16 +44,11 @@ public class SettingsScreen extends Form implements CommandListener, ItemCommand
         append(keyItem);
         append(battInfo);
 
+        // Expose message settings via menu command to keep layout consistent.
         cmdMsgSettings = new Command("Message settings", Command.SCREEN, 6);
         addCommand(cmdMsgSettings);
 
-        // Message settings "button" as its own line right after battery
-        msgSettingsItem = new StringItem("Messages:", "Message settings");
-        msgSettingsItem.setDefaultCommand(cmdMsgSettings);
-        msgSettingsItem.setItemCommandListener(this);
-        append(msgSettingsItem);
-
-        tfNodeName = new TextField("Name:", nameInit, 20, TextField.ANY);
+        tfNodeName = new TextField("Name:", nameInit, 32, TextField.ANY);
         append(tfNodeName);
         tfFreq = new TextField("Freq MHz:", formatFreqBw(nodeFreq), 12, TextField.ANY);
         append(tfFreq);
@@ -82,21 +74,8 @@ public class SettingsScreen extends Form implements CommandListener, ItemCommand
     }
 
     private static String formatPublicKey(String hex) {
-        if (hex == null || hex.length() == 0) return "n/a";
-        hex = hex.trim().toLowerCase();
-        if (hex.length() <= 24) return hex;
-        return "<" + hex.substring(0, 8) + "..." + hex.substring(hex.length() - 8) + ">";
-    }
-
-    private static String sanitizeForTextField(String s, int maxLen) {
-        if (s == null) return "";
-        StringBuffer sb = new StringBuffer();
-        int len = Math.min(s.length(), maxLen);
-        for (int i = 0; i < len; i++) {
-            char c = s.charAt(i);
-            if (c >= 32 && c < 127) sb.append(c);
-        }
-        return sb.toString();
+        String s = meshcore.util.TextUtils.formatPublicKeyShort(hex);
+        return (s.length() > 0) ? s : "n/a";
     }
 
     private static String formatFreqBw(long raw) {
@@ -194,12 +173,6 @@ public class SettingsScreen extends Form implements CommandListener, ItemCommand
         if (c == cmdMsgSettings) {
             app.showMessageSettingsScreen();
             return;
-        }
-    }
-
-    public void commandAction(Command c, Item item) {
-        if (item == msgSettingsItem && c == cmdMsgSettings) {
-            app.showMessageSettingsScreen();
         }
     }
 }

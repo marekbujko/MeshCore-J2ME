@@ -20,6 +20,15 @@ public final class TextUtils {
         return "";
     }
 
+    /** Compact public key display: "<first8...last8>" or "" if hex is empty. */
+    public static String formatPublicKeyShort(String hex) {
+        if (hex == null) return "";
+        hex = hex.trim().toLowerCase();
+        if (hex.length() == 0) return "";
+        if (hex.length() <= 24) return "<" + hex + ">";
+        return "<" + hex.substring(0, 8) + "..." + hex.substring(hex.length() - 8) + ">";
+    }
+
     public static String sanitizeAlertMessage(String s, int maxLen) {
         if (s == null || s.length() == 0) return "New message";
         StringBuffer sb = new StringBuffer();
@@ -29,6 +38,86 @@ public final class TextUtils {
             if (c >= 32 && c < 127) sb.append(c);
         }
         return sb.length() > 0 ? sb.toString() : "New message";
+    }
+
+    /**
+     * Sanitize a generic UI label (contact/repeater name) to characters the device
+     * font can reliably show, trimming to maxLen.
+     *
+     * Rules:
+     * - Allow all printable characters (code >= 32), including non-Latin (eg. Cyrillic)
+     * - Drop control chars and surrogate halves (used by emoji etc.)
+     */
+    public static String sanitizeLabel(String s, int maxLen) {
+        if (s == null || s.length() == 0) return "";
+        StringBuffer sb = new StringBuffer();
+        int len = s.length();
+        for (int i = 0; i < len; i++) {
+            char c = s.charAt(i);
+            if (c < 32) continue;                    // control chars
+            if (c >= 0xD800 && c <= 0xDFFF) continue; // surrogate halves (emoji etc.)
+            sb.append(c);
+            if (maxLen > 0 && sb.length() >= maxLen) break;
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Sanitize message text before storing/rendering.
+     * Keeps printable characters (including non-Latin) plus basic whitespace (\n, \r, \t)
+     * and drops control chars and surrogate halves (common for emojis).
+     * If maxLen > 0, trims to that many characters.
+     */
+    public static String sanitizeMessage(String s, int maxLen) {
+        if (s == null || s.length() == 0) return "";
+        StringBuffer sb = new StringBuffer();
+        int len = s.length();
+        for (int i = 0; i < len; i++) {
+            char c = s.charAt(i);
+            // allow basic whitespace
+            if (c == '\n' || c == '\r' || c == '\t') {
+                sb.append(c);
+            } else if (c >= 32 && !(c >= 0xD800 && c <= 0xDFFF)) {
+                // printable and not a surrogate (skip emoji etc.)
+                sb.append(c);
+            } else {
+                continue;
+            }
+            if (maxLen > 0 && sb.length() >= maxLen) break;
+        }
+        // If everything was stripped (e.g. message only contained unsupported emoji),
+        // return a small placeholder so the bubble is not completely empty.
+        if (sb.length() == 0 && len > 0) {
+            return "[emoji]";
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Truncate a string so that its UTF-8 encoding fits within maxBytes.
+     * Preserves whole characters (does not cut inside a multi-byte sequence).
+     */
+    public static String truncateUtf8ToBytes(String s, int maxBytes) {
+        if (s == null || s.length() == 0 || maxBytes <= 0) return "";
+        StringBuffer out = new StringBuffer();
+        int used = 0;
+        int len = s.length();
+        for (int i = 0; i < len; i++) {
+            char c = s.charAt(i);
+            String one = String.valueOf(c);
+            byte[] enc;
+            try {
+                enc = one.getBytes("UTF-8");
+            } catch (java.io.UnsupportedEncodingException e) {
+                enc = one.getBytes();
+            }
+            if (used + enc.length > maxBytes) {
+                break;
+            }
+            out.append(c);
+            used += enc.length;
+        }
+        return out.toString();
     }
 
     public static String extractDMSender(String line) {

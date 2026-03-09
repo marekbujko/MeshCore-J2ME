@@ -528,8 +528,11 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void sendChannelMessage(int channelIndex, String msg) {
         if (channelIndex < 0 || channelIndex >= channelStore.size()) return;
         try {
-            MeshProtocolClient.sendChannelMessage(transport, channelIndex, msg, getEpoch());
-            appendChannel(channelIndex, "[me] " + TextUtils.escapeNewlines(msg));
+            String clean = TextUtils.sanitizeMessage(msg, AppConstants.MAX_BUFFER_LENGTH);
+            // Limit to configured UTF-8 byte budget for public chat
+            clean = TextUtils.truncateUtf8ToBytes(clean, AppConstants.CHANNEL_MSG_MAX_BYTES);
+            MeshProtocolClient.sendChannelMessage(transport, channelIndex, clean, getEpoch());
+            appendChannel(channelIndex, "[me] " + TextUtils.escapeNewlines(clean));
         } catch (IOException e) {
             appendActivityLog("[!] Send error");
         }
@@ -545,8 +548,16 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         appendDMInternal(contactIdx, "[me] " + escapedMessage, true);
     }
 
-    public void updateSendingProgress(int contactIdx, int attempt, int maxAttempts) {
-        String status = attempt <= 1 ? AppConstants.DM_STATUS_SENDING : AppConstants.DM_STATUS_SENDING + " " + attempt + "/" + maxAttempts;
+    public void updateSendingProgress(int contactIdx, int attempt, int maxAttempts, boolean flood) {
+        String status = attempt <= 1
+                ? AppConstants.DM_STATUS_SENDING
+                : AppConstants.DM_STATUS_SENDING + " " + attempt + "/" + maxAttempts;
+        if (flood) {
+            // Avoid stacking "(Flood)" multiple times.
+            if (!status.endsWith(" (Flood)")) {
+                status = status + " (Flood)";
+            }
+        }
         replaceLastSendingWith(contactIdx, status);
     }
 
@@ -646,18 +657,30 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void sendRefreshSettings() {
+        if (transport == null) {
+            appendActivityLog("[!] Cannot refresh settings while disconnected");
+            return;
+        }
         try {
             MeshProtocolClient.sendRefreshSettings(transport, myName);
         } catch (IOException ignore) {}
     }
 
     public void sendGetBattery() {
+        if (transport == null) {
+            appendActivityLog("[!] Cannot get battery while disconnected");
+            return;
+        }
         try {
             MeshProtocolClient.sendGetBattery(transport);
         } catch (IOException ignore) {}
     }
 
     public void sendGetStats() {
+        if (transport == null) {
+            appendActivityLog("[!] Cannot get stats while disconnected");
+            return;
+        }
         try {
             MeshProtocolClient.sendGetStats(transport);
         } catch (IOException e) {
@@ -666,6 +689,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void sendGetDeviceTime() {
+        if (transport == null) {
+            appendActivityLog("[!] Cannot get device time while disconnected");
+            return;
+        }
         try {
             MeshProtocolClient.sendGetDeviceTime(transport);
         } catch (IOException e) {
@@ -674,6 +701,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void sendAdvert() {
+        if (transport == null) {
+            appendActivityLog("[!] Cannot send advert while disconnected");
+            return;
+        }
         try {
             int t = MeshProtocolClient.sendAdvert(transport, advertType);
             String kind = (t == ProtocolConstants.ADVERT_ZERO_HOP) ? "Zero Hop" : "Flood Routed";
@@ -702,15 +733,21 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void saveSettings() {
+        if (transport == null) {
+            appendActivityLog("[!] Cannot save settings while disconnected");
+            return;
+        }
         try {
             String newName = settingsScreen.getNodeName();
             if (newName.length() > 0 && !newName.equals(nodeName)) {
-                byte[] nb = newName.getBytes("UTF-8");
+                // Trim to 32 UTF-8 bytes so advert name fits protocol expectation.
+                String trimmed = meshcore.util.TextUtils.truncateUtf8ToBytes(newName, 32);
+                byte[] nb = trimmed.getBytes("UTF-8");
                 byte[] f = new byte[1 + nb.length];
                 f[0] = (byte) ProtocolConstants.CMD_SET_ADVERT_NAME;
                 System.arraycopy(nb, 0, f, 1, nb.length);
                 transport.sendFrame(f);
-                nodeName = newName;
+                nodeName = trimmed;
             }
             long[] vals = MeshProtocolClient.applySettingsAndBuildRadioFrames(
                     new MeshProtocolClient.SettingsScreenLike() {
@@ -744,10 +781,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void appendChannel(final int channelIndex, final String line) {
-        String stamped = line;
+        String stamped = TextUtils.sanitizeMessage(line, AppConstants.MAX_BUFFER_LENGTH);
         String ts = TextUtils.formatNowDateTime();
         if (ts != null && ts.length() > 0) {
-            stamped = line + " (" + ts + ")";
+            stamped = stamped + " (" + ts + ")";
         }
         channelStore.appendLine(channelIndex, stamped);
         try {
@@ -775,17 +812,18 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void appendDM(final int contactIdx, final String line) {
-        appendDMInternal(contactIdx, line, false);
+        String clean = TextUtils.sanitizeMessage(line, AppConstants.MAX_BUFFER_LENGTH);
+        appendDMInternal(contactIdx, clean, false);
     }
 
     private void appendDMInternal(final int contactIdx, final String line, boolean fromMe) {
-        String stamped = line;
+        String stamped = TextUtils.sanitizeMessage(line, AppConstants.MAX_BUFFER_LENGTH);
         String ts = TextUtils.formatNowDateTime();
         if (fromMe) {
             ts = ts + " | " + AppConstants.DM_STATUS_SENDING;
         }
         if (ts != null && ts.length() > 0) {
-            stamped = line + " (" + ts + ")";
+            stamped = stamped + " (" + ts + ")";
         }
         contactStore.appendDmLine(contactIdx, stamped);
         try {
@@ -869,8 +907,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
         if (key == null || key.length == 0) return "";
         String hex = FrameUtils.bytesToHex(key, 0, key.length);
-        if (hex.length() <= 24) return "<" + hex + ">";
-        return "<" + hex.substring(0, 8) + "..." + hex.substring(hex.length() - 8) + ">";
+        return TextUtils.formatPublicKeyShort(hex);
     }
 
     public void clearDmHistory(final int contactIdx) {
@@ -1139,6 +1176,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         replaceLastSendingWith(contactIdx, AppConstants.DM_STATUS_FAILED);
     }
 
+    public void resetPathFor(int contactIdx) {
+        resetPath(contactIdx);
+    }
+
     private String buildDeliveredStatus(int attemptCount) {
         if (attemptCount > 1) {
             return AppConstants.DM_STATUS_DELIVERED + " (" + attemptCount + ")";
@@ -1176,6 +1217,20 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             if (tokenEnd < clen && current.charAt(tokenEnd) == '/') {
                 tokenEnd++;
                 while (tokenEnd < clen && current.charAt(tokenEnd) >= '0' && current.charAt(tokenEnd) <= '9') tokenEnd++;
+            }
+        }
+        // Also skip optional " (Flood)" suffix if present so we don't accumulate duplicates.
+        final String floodSuffix = " (Flood)";
+        if (tokenEnd + floodSuffix.length() <= clen) {
+            boolean matchFlood = true;
+            for (int i = 0; i < floodSuffix.length(); i++) {
+                if (current.charAt(tokenEnd + i) != floodSuffix.charAt(i)) {
+                    matchFlood = false;
+                    break;
+                }
+            }
+            if (matchFlood) {
+                tokenEnd += floodSuffix.length();
             }
         }
         final String updated = current.substring(0, pos) + newStatus + current.substring(tokenEnd);

@@ -22,6 +22,7 @@ public class PathListScreen extends List implements CommandListener {
     private final Displayable returnTo;
 
     private final Vector editablePath = new Vector();
+    private final byte[] originalPathBytes;
     private final int initialHops;
     private final Command cmdBack;
     private final Command cmdAddHop;
@@ -39,9 +40,13 @@ public class PathListScreen extends List implements CommandListener {
 
         byte[] pathBytes = app.getContactPathBytes(contactIdx);
         if (pathBytes != null) {
+            originalPathBytes = new byte[pathBytes.length];
+            System.arraycopy(pathBytes, 0, originalPathBytes, 0, pathBytes.length);
             for (int i = 0; i < pathBytes.length; i++) {
                 editablePath.addElement(new Byte(pathBytes[i]));
             }
+        } else {
+            originalPathBytes = new byte[0];
         }
 
         cmdBack = new Command("Back", Command.BACK, 1);
@@ -113,6 +118,16 @@ public class PathListScreen extends List implements CommandListener {
         return b;
     }
 
+    /** True if current editable path differs from original path bytes. */
+    private boolean isModified() {
+        if (editablePath.size() != originalPathBytes.length) return true;
+        for (int i = 0; i < originalPathBytes.length; i++) {
+            byte b = ((Byte) editablePath.elementAt(i)).byteValue();
+            if (b != originalPathBytes[i]) return true;
+        }
+        return false;
+    }
+
     /** Build comma-separated hex summary of current path bytes, e.g. \"64, 6F\". */
     private String buildHexSummary() {
         if (editablePath.size() == 0) return "";
@@ -182,7 +197,7 @@ public class PathListScreen extends List implements CommandListener {
 
     public void commandAction(Command c, Displayable d) {
         if (c == cmdBack) {
-            app.getDisplay().setCurrent(returnTo);
+            handleBack();
         } else if (c == cmdAddHop) {
             app.getDisplay().setCurrent(new RepeaterPickerScreen(app, this, returnTo));
         } else if (c == List.SELECT_COMMAND) {
@@ -205,6 +220,27 @@ public class PathListScreen extends List implements CommandListener {
         } else if (c == cmdResetPath) {
             openResetPathConfirm();
         }
+    }
+
+    private void handleBack() {
+        if (!isModified()) {
+            app.getDisplay().setCurrent(returnTo);
+            return;
+        }
+        final PathListScreen self = this;
+        javax.microedition.lcdui.Alert a = Alerts.confirm("Save Path",
+                "Save changes to this Path before leaving?");
+        a.addCommand(new Command("Yes", Command.OK, 1));
+        a.addCommand(new Command("No", Command.BACK, 2));
+        a.setCommandListener(new CommandListener() {
+            public void commandAction(Command c, Displayable d) {
+                if (c.getCommandType() == Command.OK) {
+                    app.updateContactPath(contactIdx, getEditablePathBytes());
+                }
+                app.getDisplay().setCurrent(returnTo);
+            }
+        });
+        app.getDisplay().setCurrent(a, self);
     }
 
     private void openHexEditorWithHint() {

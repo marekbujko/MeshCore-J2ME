@@ -512,7 +512,7 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
     }
 
     private void openInputBox() {
-        inputBox = new TextBox("Write", "", 160, TextField.ANY);
+        inputBox = new TextBox("Write", "", getMaxMessageLength(), TextField.ANY);
         inputBox.addCommand(new Command("Send", Command.OK, 1));
         inputBox.addCommand(new Command("Back", Command.BACK, 2));
         inputBox.setCommandListener(this);
@@ -562,6 +562,11 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
         }
         totalContentHeight += BUBBLE_MARGIN;
         layoutDirty = false;
+    }
+
+    /** Maximum characters allowed in the write TextBox. Override per screen. */
+    protected int getMaxMessageLength() {
+        return 160;
     }
 
     /** Implement navigation when Back is pressed. */

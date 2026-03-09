@@ -41,17 +41,20 @@ public final class DmSendManager {
      * @return true if the first send succeeded and retries are running, false if first send failed
      */
     public boolean send(int contactIdx, String message) {
-        String escaped = TextUtils.escapeNewlines(message);
+        // Sanitize and enforce DM byte budget (configurable UTF-8 bytes)
+        String clean = TextUtils.sanitizeMessage(message, 0);
+        clean = TextUtils.truncateUtf8ToBytes(clean, AppConstants.DM_MSG_MAX_BYTES);
+        String escaped = TextUtils.escapeNewlines(clean);
         pendingContactIdx = contactIdx;
         attemptCount = 1;
         deliveryConfirmed = false;
 
         handler.appendSending(contactIdx, escaped);
-        if (!handler.doSend(contactIdx, message)) {
+        if (!handler.doSend(contactIdx, clean)) {
             clearPending();
             return false;
         }
-        startRetryThread(contactIdx, message);
+        startRetryThread(contactIdx, clean);
         return true;
     }
 
@@ -75,6 +78,8 @@ public final class DmSendManager {
     private void startRetryThread(final int contactIdx, final String message) {
         new Thread(new Runnable() {
             public void run() {
+                int totalMax = maxAttempts + AppConstants.DM_FLOOD_EXTRA_ATTEMPTS;
+                // Phase 1: normal path retries
                 while (!deliveryConfirmed && attemptCount < maxAttempts) {
                     try {
                         Thread.sleep(timeoutMs);
@@ -84,9 +89,30 @@ public final class DmSendManager {
                     if (deliveryConfirmed) return;
                     if (pendingContactIdx != contactIdx) return;
                     attemptCount++;
-                    handler.updateSendingProgress(contactIdx, attemptCount, maxAttempts);
+                    handler.updateSendingProgress(contactIdx, attemptCount, totalMax, false);
                     handler.doSend(contactIdx, message);
                 }
+                if (deliveryConfirmed) {
+                    return;
+                }
+
+                // Phase 2: reset path and try extra flood-mode retries
+                if (!deliveryConfirmed && AppConstants.DM_FLOOD_EXTRA_ATTEMPTS > 0) {
+                    handler.resetPathFor(contactIdx);
+                    for (int i = 0; i < AppConstants.DM_FLOOD_EXTRA_ATTEMPTS && !deliveryConfirmed; i++) {
+                        try {
+                            Thread.sleep(timeoutMs);
+                        } catch (InterruptedException e) {
+                            return;
+                        }
+                        if (deliveryConfirmed) return;
+                        if (pendingContactIdx != contactIdx) return;
+                        attemptCount++;
+                        handler.updateSendingProgress(contactIdx, attemptCount, totalMax, true);
+                        handler.doSend(contactIdx, message);
+                    }
+                }
+
                 if (!deliveryConfirmed) {
                     try {
                         Thread.sleep(timeoutMs);

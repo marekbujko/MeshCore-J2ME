@@ -131,6 +131,10 @@ public class DMScreen extends AbstractChatCanvas {
         app.showContactsScreen();
     }
 
+    protected int getMaxMessageLength() {
+        return AppConstants.DM_MSG_MAX_BYTES;
+    }
+
     protected void onSendMessage(final String msg) {
         if (contactIdx < 0) return;
         new Thread(new Runnable() {

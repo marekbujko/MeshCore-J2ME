@@ -19,9 +19,15 @@ public final class AppConstants {
     public static final int MAX_BUFFER_LENGTH = 2000;
     public static final int NOTIFICATION_BLINK_INTERVAL_MS = 750;
 
+    /** Max UTF-8 bytes for messages. */
+    public static final int CHANNEL_MSG_MAX_BYTES = 130;
+    public static final int DM_MSG_MAX_BYTES = 150;
+
     /** DM send retry (used by DmSendManager). */
     public static final int DM_SEND_MAX_ATTEMPTS = 3;
-    public static final int DM_SEND_TIMEOUT_MS = 8000;
+    /** Extra flood-mode retries after path reset. */
+    public static final int DM_FLOOD_EXTRA_ATTEMPTS = 1;
+    public static final int DM_SEND_TIMEOUT_MS = 10000;
 
     /** DM status: "Sending" then "Sending 2/3", "Sending 3/3" etc. */
     public static final String DM_STATUS_SENDING = "Sending";

@@ -22,6 +22,10 @@ public class ChannelScreen extends AbstractChatCanvas {
         app.showChannelListScreen();
     }
 
+    protected int getMaxMessageLength() {
+        return meshcore.util.AppConstants.CHANNEL_MSG_MAX_BYTES;
+    }
+
     protected void onSendMessage(final String msg) {
         new Thread(new Runnable() {
             public void run() {

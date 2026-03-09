@@ -14,9 +14,13 @@ public interface DmSendHandler {
     void appendSending(int contactIdx, String escapedMessage);
 
     /**
-     * Update the sending status to "Sending 2/3", "Sending 3/3" etc. (attempt 1 shows "Sending").
+     * Update the sending status to "Sending 2/5", "Sending 3/5 (Flood)" etc.
+     * @param contactIdx contact index
+     * @param attempt current attempt number (1-based)
+     * @param maxAttempts total attempts including any extra flood retries
+     * @param flood true when this attempt is after a path reset (flood-mode)
      */
-    void updateSendingProgress(int contactIdx, int attempt, int maxAttempts);
+    void updateSendingProgress(int contactIdx, int attempt, int maxAttempts, boolean flood);
 
     /**
      * Perform one direct-message send over the transport.
@@ -31,4 +35,10 @@ public interface DmSendHandler {
      * Replace "Sending..." with "Failed" in the contact's DM buffer and refresh UI.
      */
     void onSendFailed(int contactIdx);
+
+    /**
+     * Reset the routing path for this contact so subsequent retries use flood-mode
+     * and can discover a new path.
+     */
+    void resetPathFor(int contactIdx);
 }

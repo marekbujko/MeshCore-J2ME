@@ -9,13 +9,26 @@ public final class FrameUtils {
 
     private FrameUtils() {}
 
+    /**
+     * Extract a fixed-length, null-terminated string field as UTF-8 where possible.
+     * Compatible with ASCII (1 byte per char), but also supports names in other
+     * languages (eg. Cyrillic) when encoded in UTF-8 in the frame.
+     */
     public static String extractString(byte[] b, int off, int max) {
-        StringBuffer sb = new StringBuffer();
-        for (int i = off; i < off + max && i < b.length; i++) {
-            if (b[i] == 0) break;
-            sb.append((char) (b[i] & 0xFF));
+        if (b == null || off >= b.length || max <= 0) return "";
+        int end = off;
+        int limit = off + max;
+        if (limit > b.length) limit = b.length;
+        while (end < limit && b[end] != 0) {
+            end++;
         }
-        return sb.toString();
+        int len = end - off;
+        if (len <= 0) return "";
+        try {
+            return new String(b, off, len, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            return new String(b, off, len);
+        }
     }
 
     public static String extractVarchar(byte[] b, int off) {
