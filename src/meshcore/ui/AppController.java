@@ -34,6 +34,7 @@ public interface AppController {
     void sendGetContacts();
     void removeContact(int idx);
     void resetPath(int contactIdx);
+    void updateContactPath(int contactIdx, byte[] newPath);
     void saveSettings();
     void sendGetBattery();
     void sendRefreshSettings();
@@ -51,4 +52,9 @@ public interface AppController {
     void clearChannelHistory(int channelIndex);
     void clearDmHistory(int contactIdx);
     int getContactPathHops(int contactIdx);
+    byte[] getContactPathBytes(int contactIdx);
+    String getRepeaterNameForPathByte(byte pathByte);
+    java.util.Vector getRepeaterIndices();
+    byte getRepeaterPathByte(int contactIdx);
+    String getRepeaterPublicKeyHex(int contactIdx);
 }

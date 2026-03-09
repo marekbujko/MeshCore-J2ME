@@ -10,6 +10,9 @@ public final class ContactStore {
     private final Vector keys = new Vector();
     private final Vector types = new Vector();
     private final Vector pathHops = new Vector();
+    private final Vector pathBytes = new Vector();
+    private final Vector contactFlags = new Vector();
+    private final Vector lastAdvert = new Vector();
     private final Vector dmBuffers = new Vector();
     private final Vector unreadCounts = new Vector();
 
@@ -29,14 +32,47 @@ public final class ContactStore {
         return pathHops;
     }
 
+    public Vector getPathBytes() {
+        return pathBytes;
+    }
+
     /** Hop count for contact (0 = direct, >0 = N hops), or -1 if unknown. */
     public int getPathHopsCount(int index) {
         if (index < 0 || index >= pathHops.size()) return -1;
         return ((Integer) pathHops.elementAt(index)).intValue();
     }
 
+    /** Path bytes for contact (1 byte per hop = node hash = first byte of repeater pub key). */
+    public byte[] getPathBytes(int index) {
+        if (index < 0 || index >= pathBytes.size()) return null;
+        return (byte[]) pathBytes.elementAt(index);
+    }
+
+    public int getFlags(int index) {
+        if (index < 0 || index >= contactFlags.size()) return 0;
+        return ((Integer) contactFlags.elementAt(index)).intValue();
+    }
+
+    public long getLastAdvert(int index) {
+        if (index < 0 || index >= lastAdvert.size()) return 0;
+        return ((Long) lastAdvert.elementAt(index)).longValue();
+    }
+
+    public Vector getContactFlags() {
+        return contactFlags;
+    }
+
+    public Vector getLastAdvert() {
+        return lastAdvert;
+    }
+
     public int size() {
         return names.size();
+    }
+
+    public int getType(int index) {
+        if (index < 0 || index >= types.size()) return 0;
+        return ((Integer) types.elementAt(index)).intValue();
     }
 
     public String getName(int index) {

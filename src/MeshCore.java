@@ -112,7 +112,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void startApp() {
         display = Display.getDisplay(this);
         dmSendManager = new DmSendManager(this, AppConstants.DM_SEND_MAX_ATTEMPTS, AppConstants.DM_SEND_TIMEOUT_MS);
-        frameHandler = new FrameHandler(this, contactStore.getNames(), contactStore.getKeys(), contactStore.getTypes(), contactStore.getPathHops());
+        frameHandler = new FrameHandler(this, contactStore.getNames(), contactStore.getKeys(), contactStore.getTypes(), contactStore.getPathHops(), contactStore.getPathBytes(), contactStore.getContactFlags(), contactStore.getLastAdvert());
         connectionManager = new ConnectionManager(new ConnectionManager.Listener() {
             public void onFrame(byte[] frame) {
                 frameHandler.handleFrame(frame);
@@ -608,9 +608,41 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             MeshProtocolClient.sendResetPath(transport, key);
             appendActivityLog("[*] Path reset for " + contactStore.getName(contactIdx));
             sendGetContacts();
+            sendAdvertFloodForPathDiscovery();
         } catch (IOException e) {
-            appendActivityLog("[!] Reset path failed");
+            appendActivityLog("[!] Reset Path failed");
         }
+    }
+
+    public void updateContactPath(int contactIdx, byte[] newPath) {
+        if (transport == null || contactIdx < 0 || contactIdx >= contactStore.getKeys().size()) return;
+        if (newPath == null) newPath = new byte[0];
+        if (newPath.length > 64) {
+            byte[] trimmed = new byte[64];
+            System.arraycopy(newPath, 0, trimmed, 0, 64);
+            newPath = trimmed;
+        }
+        try {
+            byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
+            int type = contactStore.getType(contactIdx);
+            int flags = contactStore.getFlags(contactIdx);
+            String name = contactStore.getName(contactIdx);
+            long lastAdvert = contactStore.getLastAdvert(contactIdx);
+            MeshProtocolClient.sendAddUpdateContact(transport, key, type, flags, newPath, name, lastAdvert);
+            appendActivityLog("[*] Path saved for " + name);
+            sendGetContacts();
+            sendAdvertFloodForPathDiscovery();
+        } catch (IOException e) {
+            appendActivityLog("[!] Save path failed");
+        }
+    }
+
+    /** Send one flood advert so the network can re-learn paths (e.g. after path reset or path edit). */
+    private void sendAdvertFloodForPathDiscovery() {
+        try {
+            MeshProtocolClient.sendAdvert(transport, ProtocolConstants.ADVERT_FLOOD);
+            appendActivityLog("[*] Flood advert sent (path discovery)");
+        } catch (IOException ignore) {}
     }
 
     public void sendRefreshSettings() {
@@ -795,6 +827,50 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public int getContactPathHops(int contactIdx) {
         return contactStore.getPathHopsCount(contactIdx);
+    }
+
+    public byte[] getContactPathBytes(int contactIdx) {
+        return contactStore.getPathBytes(contactIdx);
+    }
+
+    public String getRepeaterNameForPathByte(byte pathByte) {
+        Vector keys = contactStore.getKeys();
+        Vector names = contactStore.getNames();
+        Vector types = contactStore.getTypes();
+        for (int i = 0; i < keys.size(); i++) {
+            if (i < types.size() && ((Integer) types.elementAt(i)).intValue() != ProtocolConstants.ADV_TYPE_REPEATER) continue;
+            byte[] key = (byte[]) keys.elementAt(i);
+            if (key != null && key.length > 0 && key[0] == pathByte) {
+                return (i < names.size()) ? (String) names.elementAt(i) : null;
+            }
+        }
+        return null;
+    }
+
+    public Vector getRepeaterIndices() {
+        Vector indices = new Vector();
+        Vector types = contactStore.getTypes();
+        for (int i = 0; i < types.size(); i++) {
+            if (((Integer) types.elementAt(i)).intValue() == ProtocolConstants.ADV_TYPE_REPEATER) {
+                indices.addElement(new Integer(i));
+            }
+        }
+        return indices;
+    }
+
+    public byte getRepeaterPathByte(int contactIdx) {
+        if (contactIdx < 0 || contactIdx >= contactStore.getKeys().size()) return 0;
+        byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
+        return (key != null && key.length > 0) ? key[0] : 0;
+    }
+
+    public String getRepeaterPublicKeyHex(int contactIdx) {
+        if (contactIdx < 0 || contactIdx >= contactStore.getKeys().size()) return "";
+        byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
+        if (key == null || key.length == 0) return "";
+        String hex = FrameUtils.bytesToHex(key, 0, key.length);
+        if (hex.length() <= 24) return "<" + hex + ">";
+        return "<" + hex.substring(0, 8) + "..." + hex.substring(hex.length() - 8) + ">";
     }
 
     public void clearDmHistory(final int contactIdx) {

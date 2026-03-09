@@ -132,7 +132,7 @@ public class ChannelListScreen extends List implements CommandListener {
             if (idx > 0 && idx < channelNames.size()) {
                 String name = (String) channelNames.elementAt(idx);
                 javax.microedition.lcdui.Alert confirm =
-                        Alerts.confirm("Remove channel", "Remove " + name + "?");
+                        Alerts.confirm("Remove channel", "Remove \"" + name + "\"?");
                 confirm.addCommand(new Command("Yes", Command.OK, 1));
                 confirm.addCommand(new Command("No", Command.CANCEL, 2));
                 confirm.setCommandListener(new CommandListener() {

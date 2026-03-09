@@ -80,6 +80,37 @@ public final class MeshProtocolClient {
         transport.sendFrame(f);
     }
 
+    /** CMD_ADD_UPDATE_CONTACT: update a contact (e.g. path). Format: code, public_key(32), type, flags, out_path_len, out_path(64), adv_name(32), last_advert(4). */
+    public static void sendAddUpdateContact(FrameTransport transport, byte[] publicKey, int type, int flags, byte[] outPath, String advName, long lastAdvert) throws IOException {
+        int pathLen = (outPath != null && outPath.length > 0) ? outPath.length : 0;
+        if (pathLen > 64) pathLen = 64;
+        byte[] nameBytes = advName != null ? advName.getBytes("UTF-8") : new byte[0];
+        if (nameBytes.length > 31) {
+            byte[] trimmed = new byte[31];
+            System.arraycopy(nameBytes, 0, trimmed, 0, 31);
+            nameBytes = trimmed;
+        }
+        byte[] name32 = new byte[32];
+        System.arraycopy(nameBytes, 0, name32, 0, nameBytes.length);
+
+        byte[] f = new byte[1 + 32 + 1 + 1 + 1 + 64 + 32 + 4];
+        int off = 0;
+        f[off++] = (byte) ProtocolConstants.CMD_ADD_UPDATE_CONTACT;
+        System.arraycopy(publicKey, 0, f, off, 32);
+        off += 32;
+        f[off++] = (byte) type;
+        f[off++] = (byte) (flags & 0xFF);
+        f[off++] = (byte) pathLen;
+        if (pathLen > 0) {
+            System.arraycopy(outPath, 0, f, off, pathLen);
+        }
+        off += 64;
+        System.arraycopy(name32, 0, f, off, 32);
+        off += 32;
+        FrameTransport.writeUint32LE(f, off, lastAdvert);
+        transport.sendFrame(f);
+    }
+
     public static void sendRefreshSettings(FrameTransport transport, String myName) throws IOException {
         transport.sendFrame(new byte[]{
             (byte) ProtocolConstants.CMD_DEVICE_QUERY,

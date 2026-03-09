@@ -16,13 +16,20 @@ public final class FrameHandler {
     private final Vector contactKeys;
     private final Vector contactTypes;
     private final Vector contactPathHops;
+    private final Vector contactPathBytes;
+    private final Vector contactFlags;
+    private final Vector contactLastAdvert;
 
-    public FrameHandler(FrameHandlerListener listener, Vector contactNames, Vector contactKeys, Vector contactTypes, Vector contactPathHops) {
+    public FrameHandler(FrameHandlerListener listener, Vector contactNames, Vector contactKeys, Vector contactTypes,
+                        Vector contactPathHops, Vector contactPathBytes, Vector contactFlags, Vector contactLastAdvert) {
         this.listener = listener;
         this.contactNames = contactNames;
         this.contactKeys = contactKeys;
         this.contactTypes = contactTypes;
         this.contactPathHops = contactPathHops;
+        this.contactPathBytes = contactPathBytes;
+        this.contactFlags = contactFlags;
+        this.contactLastAdvert = contactLastAdvert;
     }
 
     public void handleFrame(byte[] f) {
@@ -37,6 +44,9 @@ public final class FrameHandler {
             contactKeys.removeAllElements();
             contactTypes.removeAllElements();
             contactPathHops.removeAllElements();
+            contactPathBytes.removeAllElements();
+            contactFlags.removeAllElements();
+            contactLastAdvert.removeAllElements();
             listener.onContactsStart();
         } else if (code == ProtocolConstants.RESP_CONTACT) {
             handleContact(f);
@@ -114,13 +124,32 @@ public final class FrameHandler {
             System.arraycopy(f, 1, key, 0, 32);
             int type = f[33] & 0xFF;
             int outPathLen = f.length >= 36 ? (byte) f[35] : 0;
-            int hops = (outPathLen > 0 && outPathLen <= 64) ? outPathLen : 0;
+            int hops;
+            if (outPathLen == (byte) 0xFF) {
+                // Firmware uses -1 (0xFF) to mean "no fixed path" (flood/unknown).
+                hops = -1;
+            } else if (outPathLen > 0 && outPathLen <= 64) {
+                hops = outPathLen;
+            } else {
+                // 0 from firmware means direct mode (no repeaters).
+                hops = 0;
+            }
             String name = FrameUtils.extractString(f, 100, 32);
             if (name.length() == 0) name = FrameUtils.bytesToHex(key, 0, 3);
             contactKeys.addElement(key);
             contactNames.addElement(name);
             contactTypes.addElement(new Integer(type));
             contactPathHops.addElement(new Integer(hops));
+            byte[] path = null;
+            if (hops > 0 && f.length >= 36 + hops) {
+                path = new byte[hops];
+                System.arraycopy(f, 36, path, 0, hops);
+            }
+            contactPathBytes.addElement(path);
+            int flags = f.length >= 35 ? (f[34] & 0xFF) : 0;
+            long lastAdv = f.length >= 136 ? FrameTransport.readUint32LE(f, 132) : 0;
+            contactFlags.addElement(new Integer(flags));
+            contactLastAdvert.addElement(new Long(lastAdv));
         }
     }
 

@@ -40,8 +40,8 @@ public class ContactsScreen extends List implements CommandListener {
         this.visibleIndices = new Vector();
         this.filterQuery = "";
         cmdSearch = new Command("Search", Command.ITEM, 0);
-        cmdDM = new Command("Message", Command.OK, 1);
-        cmdRemove = new Command("Remove", Command.SCREEN, 4);
+        cmdDM = new Command("Message", Command.ITEM, 1);
+        cmdRemove = new Command("Remove Contact", Command.SCREEN, 4);
         cmdRefresh = new Command("Refresh", Command.ITEM, 3);
         cmdBack = new Command("Back", Command.BACK, 2);
         addCommand(cmdSearch);
@@ -138,8 +138,8 @@ public class ContactsScreen extends List implements CommandListener {
             if (idx >= 0 && idx < contactNames.size()) {
                 String name = (String) contactNames.elementAt(idx);
                 javax.microedition.lcdui.Alert confirm =
-                        new javax.microedition.lcdui.Alert("Remove contact",
-                                "Remove " + name + "?", null,
+                        new javax.microedition.lcdui.Alert("Remove Contact",
+                                "Remove \"" + name + "\" from your contacts?", null,
                                 javax.microedition.lcdui.AlertType.CONFIRMATION);
                 confirm.addCommand(new Command("Yes", Command.OK, 1));
                 confirm.addCommand(new Command("No", Command.CANCEL, 2));

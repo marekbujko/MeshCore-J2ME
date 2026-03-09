@@ -3,6 +3,7 @@ package meshcore.ui;
 import javax.microedition.lcdui.Canvas;
 import javax.microedition.lcdui.Font;
 import javax.microedition.lcdui.Graphics;
+import javax.microedition.lcdui.Image;
 import javax.microedition.lcdui.TextBox;
 import javax.microedition.lcdui.TextField;
 import javax.microedition.lcdui.Command;
@@ -46,13 +47,16 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
     // Lazy history loading state
     private boolean hasMoreHistory = true;
 
+    private static Image emptyStateIcon;
+
     protected AbstractChatCanvas(AppController app, String title, StringBuffer buf) {
         this.app = app;
         this.buf = buf;
         setTitle(title);
         cmdWrite = new Command("Write", Command.OK, 1);
         cmdBack = new Command("Back", Command.BACK, 2);
-        cmdClear = new Command("Clear history", Command.SCREEN, 3);
+        // Use higher priority value so Clear History appears at the end of the Options menu.
+        cmdClear = new Command("Clear History", Command.SCREEN, 10);
         addCommand(cmdWrite);
         addCommand(cmdBack);
         addCommand(cmdClear);
@@ -145,10 +149,44 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
         g.setColor(0xFFFFFF);
         g.fillRect(0, 0, w, h);
 
-        // Top hint when scrolled to top: prompt to load more or say no more
+        // Empty state
+        if (messages.size() == 0) {
+            if (emptyStateIcon == null) {
+                try {
+                    emptyStateIcon = Image.createImage("/messages.png");
+                } catch (Throwable ignore) {}
+            }
+            Font boldFont = Font.getFont(Font.FACE_PROPORTIONAL, Font.STYLE_BOLD, Font.SIZE_SMALL);
+            String sub = getEmptyStateSubtitle();
+            Vector subLines = (sub != null && sub.length() > 0)
+                    ? wrapText(sub, w - (BUBBLE_MARGIN * 4)) : new Vector();
+            int lineH = boldFont.getHeight();
+            int iconH = (emptyStateIcon != null) ? emptyStateIcon.getHeight() + 8 : 0;
+            int totalH = iconH + lineH + 4 + subLines.size() * font.getHeight();
+            int yStart = (h - totalH) / 2;
+            if (emptyStateIcon != null) {
+                g.drawImage(emptyStateIcon, w / 2, yStart, Graphics.HCENTER | Graphics.TOP);
+            }
+            int textY = yStart + iconH;
+            g.setFont(boldFont);
+            g.setColor(0x666666);
+            g.drawString("No Messages", w / 2, textY, Graphics.TOP | Graphics.HCENTER);
+            if (subLines.size() > 0) {
+                g.setFont(font);
+                g.setColor(0x999999);
+                int subY = textY + lineH + 4;
+                for (int i = 0; i < subLines.size(); i++) {
+                    g.drawString((String) subLines.elementAt(i), w / 2, subY, Graphics.TOP | Graphics.HCENTER);
+                    subY += font.getHeight();
+                }
+            }
+            return;
+        }
+
+        // Top hint for history loading (only when no more history)
         int hintHeight = 0;
-        if (scrollOffset == 0) {
-            String hint = hasMoreHistory ? "Scroll up for more" : "No older messages";
+        if (scrollOffset == 0 && !hasMoreHistory) {
+            String hint = "No older messages";
             g.setColor(0x999999);
             int yHint = BUBBLE_MARGIN / 2;
             g.drawString(hint, w / 2, yHint, Graphics.TOP | Graphics.HCENTER);
@@ -537,5 +575,10 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
 
     /** Load one older history batch (from RMS) when user scrolls to the top. */
     protected abstract boolean loadOlderHistoryBatch();
+
+    /** Subtitle for empty state (null = none). Override in DMScreen for contact hint. */
+    protected String getEmptyStateSubtitle() {
+        return null;
+    }
 }
 
