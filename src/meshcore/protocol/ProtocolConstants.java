@@ -13,25 +13,25 @@ public final class ProtocolConstants {
     public static final int CMD_SEND_TXT_MSG     = 2;
     public static final int CMD_SEND_CHANNEL_MSG = 3;
     public static final int CMD_GET_CONTACTS     = 4;
+    public static final int CMD_GET_DEVICE_TIME   = 5;
     public static final int CMD_SET_DEVICE_TIME  = 6;
     public static final int CMD_SEND_SELF_ADVERT  = 7;
     public static final int CMD_SET_ADVERT_NAME  = 8;
     public static final int CMD_ADD_UPDATE_CONTACT = 9;
-
-    /** Advert type: second byte in CMD_SEND_SELF_ADVERT frame (0 = zero-hop, 1 = flood) */
-    public static final int ADVERT_ZERO_HOP = 0;
-    public static final int ADVERT_FLOOD    = 1;
     public static final int CMD_SYNC_NEXT_MESSAGE = 10;
     public static final int CMD_SET_RADIO_PARAMS  = 11;
     public static final int CMD_SET_RADIO_TX_PWR  = 12;
     public static final int CMD_RESET_PATH        = 13;
-    public static final int CMD_REMOVE_CONTACT    = 15;
+    public static final int CMD_GET_BATT_STORAGE  = 20;
+    public static final int CMD_DEVICE_QUERY      = 22;
+    public static final int CMD_GET_STATS         = 56;
     public static final int CMD_GET_CHANNEL       = 31;
     public static final int CMD_SET_CHANNEL       = 32;
-    public static final int CMD_GET_BATT_STORAGE  = 20;
-    public static final int CMD_GET_STATS         = 56;
-    public static final int CMD_DEVICE_QUERY      = 22;
-    public static final int CMD_GET_DEVICE_TIME   = 5;
+
+    /** Advert type: second byte in CMD_SEND_SELF_ADVERT frame (0 = zero-hop, 1 = flood) */
+    public static final int ADVERT_ZERO_HOP = 0;
+    public static final int ADVERT_FLOOD    = 1;
+    public static final int CMD_REMOVE_CONTACT    = 15;
 
     // Responses (radio -> app)
     public static final int RESP_OK             = 0;

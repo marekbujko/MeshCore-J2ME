@@ -34,6 +34,8 @@ import meshcore.ui.RepeatersScreen;
 import meshcore.ui.NotificationsScreen;
 import meshcore.ui.FavoritesScreen;
 import meshcore.ui.DMScreen;
+import meshcore.ui.ShareContactScreen;
+import meshcore.ui.ShareQrScreen;
 import meshcore.ui.SettingsScreen;
 import meshcore.ui.MessageSettingsScreen;
 import meshcore.ui.Alerts;
@@ -323,6 +325,13 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         dmScreen = new DMScreen(this, idx, name, buf, returnTo);
         display.setCurrent(dmScreen);
         trySyncMessages();
+    }
+
+    public String getContactPublicKeyHex(int contactIdx) {
+        if (contactIdx < 0 || contactIdx >= contactStore.getKeys().size()) return "";
+        byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
+        if (key == null || key.length == 0) return "";
+        return FrameUtils.bytesToHex(key, 0, key.length);
     }
 
     public void showSettingsScreen() {

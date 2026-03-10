@@ -20,6 +20,7 @@ public final class ContactActionsScreen extends List implements CommandListener 
     private final int contactIdx;
     private final Displayable returnTo;
     private final boolean isRepeater;
+    private final int contactType;
 
     private final Command cmdBack;
 
@@ -42,6 +43,7 @@ public final class ContactActionsScreen extends List implements CommandListener 
         this.app = app;
         this.contactIdx = contactIdx;
         this.returnTo = returnTo;
+        this.contactType = type;
         this.isRepeater = (type == ProtocolConstants.ADV_TYPE_REPEATER);
 
         String safeName = TextUtils.sanitizeLabel(name, 32);
@@ -165,8 +167,8 @@ public final class ContactActionsScreen extends List implements CommandListener 
     }
 
     private void showShareInfo() {
-        Alerts.info(app.getDisplay(), this, "Share",
-                "Share action is not implemented yet.");
+        String safeName = getTitle();
+        app.getDisplay().setCurrent(new ShareContactScreen(app, contactIdx, safeName, contactType, this));
     }
 
     private void openWriteMessage() {

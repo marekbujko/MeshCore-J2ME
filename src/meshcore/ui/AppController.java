@@ -51,6 +51,9 @@ public interface AppController {
     int getAdvertType();
     void trySyncMessages();
 
+    /** Full 32-byte public key for a contact, as hex. */
+    String getContactPublicKeyHex(int contactIdx);
+
     void appendChannel(int channelIndex, String line);
     void appendActivityLog(String line);
     void appendDM(int contactIdx, String line);
