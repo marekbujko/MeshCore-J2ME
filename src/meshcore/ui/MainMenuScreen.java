@@ -23,15 +23,17 @@ public class MainMenuScreen extends List implements CommandListener {
     private final Command cmdSettings;
 
     public static final int IDX_NOTIFICATIONS = 0;
-    public static final int IDX_CHANNEL = 1;
-    public static final int IDX_CONTACTS = 2;
-    public static final int IDX_REPEATERS = 3;
+    public static final int IDX_FAVORITES = 1;
+    public static final int IDX_CHANNEL = 2;
+    public static final int IDX_CONTACTS = 3;
+    public static final int IDX_REPEATERS = 4;
 
     private final Image iconChannels;
     private final Image iconContacts;
     private final Image iconRepeaters;
     private final Image iconNotif;
     private final Image iconNotifNew;
+    private final Image iconFavorites;
 
     public MainMenuScreen(AppController app) {
         super("MeshCore", List.IMPLICIT);
@@ -41,7 +43,9 @@ public class MainMenuScreen extends List implements CommandListener {
         iconRepeaters = loadIcon("/repeaters.png");
         iconNotif = loadIcon("/notification-bell.png");
         iconNotifNew = loadIcon("/notification-bell-new.png");
+        iconFavorites = loadIcon("/favorite.png");
         append("Notifications", iconNotif != null ? iconNotif : null);
+        append("Favorites", iconFavorites != null ? iconFavorites : null);
         append("Channels", iconChannels);
         append("Contacts / DM", iconContacts);
         append("Repeaters", iconRepeaters);
@@ -116,6 +120,8 @@ public class MainMenuScreen extends List implements CommandListener {
                 app.showRepeatersScreen();
             } else if (idx == IDX_NOTIFICATIONS) {
                 app.showNotificationsScreen();
+            } else if (idx == IDX_FAVORITES) {
+                app.showFavoritesScreen();
             }
         }
     }

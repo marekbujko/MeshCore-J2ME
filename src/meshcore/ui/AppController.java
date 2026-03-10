@@ -1,6 +1,7 @@
 package meshcore.ui;
 
 import javax.microedition.lcdui.Display;
+import javax.microedition.lcdui.Displayable;
 
 /**
  * Callback interface for screens to trigger app actions.
@@ -20,7 +21,9 @@ public interface AppController {
     void showContactsScreen();
     void showRepeatersScreen();
     void showDMScreen(int idx);
+    void showDMScreen(int idx, Displayable returnTo);
     void showNotificationsScreen();
+    void showFavoritesScreen();
     void showSettingsScreen();
     void showActivityLogScreen();
 
@@ -33,6 +36,9 @@ public interface AppController {
     void sendDirectMessage(int idx, String msg);
     void sendGetContacts();
     void removeContact(int idx);
+    boolean isFavorite(int contactIdx);
+    void addFavorite(int contactIdx);
+    void removeFavorite(int contactIdx);
     void resetPath(int contactIdx);
     void updateContactPath(int contactIdx, byte[] newPath);
     void saveSettings();

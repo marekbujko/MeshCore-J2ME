@@ -17,6 +17,7 @@ import meshcore.util.ContactStore;
 import meshcore.util.ConnectStorage;
 import meshcore.util.DmSendHandler;
 import meshcore.util.DmSendManager;
+import meshcore.util.FavoriteStore;
 import meshcore.util.FrameUtils;
 import meshcore.util.ImageUtils;
 import meshcore.util.ParseUtils;
@@ -31,6 +32,7 @@ import meshcore.ui.ChannelScreen;
 import meshcore.ui.ContactsScreen;
 import meshcore.ui.RepeatersScreen;
 import meshcore.ui.NotificationsScreen;
+import meshcore.ui.FavoritesScreen;
 import meshcore.ui.DMScreen;
 import meshcore.ui.SettingsScreen;
 import meshcore.ui.MessageSettingsScreen;
@@ -306,6 +308,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void showDMScreen(int idx) {
+        showDMScreen(idx, null);
+    }
+
+    public void showDMScreen(int idx, Displayable returnTo) {
         ensureDmBuffersSize(contactStore.size());
         ensureContactUnreadSize(contactStore.size());
         setContactUnread(idx, 0);
@@ -314,7 +320,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         try {
             meshcore.util.HistoryStore.loadDmTailIntoBuffer(idx, buf);
         } catch (Throwable ignore) {}
-        dmScreen = new DMScreen(this, idx, name, buf);
+        dmScreen = new DMScreen(this, idx, name, buf, returnTo);
         display.setCurrent(dmScreen);
         trySyncMessages();
     }
@@ -347,6 +353,30 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 contactStore.getNames(), contactStore.getUnreadCounts()
         );
         display.setCurrent(notificationsScreen);
+    }
+
+    public void showFavoritesScreen() {
+        FavoritesScreen fav = new FavoritesScreen(this,
+                contactStore.getNames(), contactStore.getTypes(), contactStore.getKeys());
+        display.setCurrent(fav);
+    }
+
+    public boolean isFavorite(int contactIdx) {
+        if (contactIdx < 0 || contactIdx >= contactStore.getKeys().size()) return false;
+        byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
+        return FavoriteStore.isFavorite(FavoriteStore.keyToHex(key));
+    }
+
+    public void addFavorite(int contactIdx) {
+        if (contactIdx < 0 || contactIdx >= contactStore.getKeys().size()) return;
+        byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
+        FavoriteStore.addFavorite(FavoriteStore.keyToHex(key));
+    }
+
+    public void removeFavorite(int contactIdx) {
+        if (contactIdx < 0 || contactIdx >= contactStore.getKeys().size()) return;
+        byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
+        FavoriteStore.removeFavorite(FavoriteStore.keyToHex(key));
     }
 
     // -----------------------------------------------------------------------
@@ -971,7 +1001,14 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     private void showIncomingNotification(String message) {
-        NotificationPresenter.showIncoming(display, display.getCurrent(), message);
+        if (display == null) return;
+        Displayable next = display.getCurrent();
+        // If we're still on the Connect screen but the main menu exists, return to main menu after the alert
+        // so users aren't bounced back to ConnectScreen when notifications arrive during initial sync.
+        if (next instanceof ConnectScreen && mainMenuScreen != null) {
+            next = mainMenuScreen;
+        }
+        NotificationPresenter.showIncoming(display, next, message);
     }
 
     private boolean hasAnyUnread() {

@@ -3,6 +3,7 @@ package meshcore.ui;
 import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.CommandListener;
 import javax.microedition.lcdui.Displayable;
+import javax.microedition.lcdui.Image;
 import javax.microedition.lcdui.List;
 import javax.microedition.lcdui.TextBox;
 import javax.microedition.lcdui.TextField;
@@ -10,7 +11,7 @@ import java.util.Vector;
 import meshcore.protocol.ProtocolConstants;
 
 /**
- * Contacts list screen: tap to open DM, refresh to sync, remove contact.
+ * Contacts list screen: tap to open actions, refresh to sync.
  * Repeaters are excluded. Search command opens keyboard search to filter the list by name.
  */
 public class ContactsScreen extends List implements CommandListener {
@@ -24,12 +25,14 @@ public class ContactsScreen extends List implements CommandListener {
     private String filterQuery;
     private final Command cmdSearch;
     private final Command cmdDM;
-    private final Command cmdRemove;
     private final Command cmdRefresh;
     private final Command cmdBack;
 
     /** Remember last selected list index so returning from a DM restores position. */
     private static int lastSelectedListIndex = 0;
+
+    private final Image iconFavorite;
+    private final Image iconContact;
 
     public ContactsScreen(AppController app, Vector contactNames, Vector contactUnreadCount, Vector contactTypes) {
         super("Contacts", List.IMPLICIT);
@@ -39,14 +42,14 @@ public class ContactsScreen extends List implements CommandListener {
         this.contactTypes = contactTypes;
         this.visibleIndices = new Vector();
         this.filterQuery = "";
+        this.iconFavorite = loadIcon("/favorite-selected.png");
+        this.iconContact = loadIcon("/contacts.png");
         cmdSearch = new Command("Search", Command.ITEM, 0);
-        cmdDM = new Command("Message", Command.ITEM, 1);
-        cmdRemove = new Command("Remove Contact", Command.SCREEN, 4);
+        cmdDM = new Command("Write Message", Command.ITEM, 1);
         cmdRefresh = new Command("Refresh", Command.ITEM, 3);
         cmdBack = new Command("Back", Command.BACK, 2);
-        addCommand(cmdSearch);
         addCommand(cmdDM);
-        addCommand(cmdRemove);
+        addCommand(cmdSearch);
         addCommand(cmdRefresh);
         addCommand(cmdBack);
         setCommandListener(this);
@@ -77,7 +80,8 @@ public class ContactsScreen extends List implements CommandListener {
                 int unread = (i < contactUnreadCount.size())
                     ? ((Integer) contactUnreadCount.elementAt(i)).intValue() : 0;
                 String label = (unread > 0) ? (name + " (" + unread + " new)") : name;
-                append(label, null);
+                Image icon = app.isFavorite(i) ? iconFavorite : iconContact;
+                append(label, icon);
             }
         }
         if (visibleIndices.size() == 0) {
@@ -90,6 +94,14 @@ public class ContactsScreen extends List implements CommandListener {
             title += ")";
         }
         setTitle(title);
+    }
+
+    private static Image loadIcon(String path) {
+        try {
+            return Image.createImage(path);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** Returns the real contact index for the current list selection, or -1. */
@@ -133,33 +145,24 @@ public class ContactsScreen extends List implements CommandListener {
             }).start();
             return;
         }
-        if (c == cmdRemove) {
-            final int idx = getSelectedContactIndex();
-            if (idx >= 0 && idx < contactNames.size()) {
-                String name = (String) contactNames.elementAt(idx);
-                javax.microedition.lcdui.Alert confirm =
-                        new javax.microedition.lcdui.Alert("Remove Contact",
-                                "Remove \"" + name + "\" from your contacts?", null,
-                                javax.microedition.lcdui.AlertType.CONFIRMATION);
-                confirm.addCommand(new Command("Yes", Command.OK, 1));
-                confirm.addCommand(new Command("No", Command.CANCEL, 2));
-                confirm.setCommandListener(new CommandListener() {
-                    public void commandAction(Command cmd, Displayable disp) {
-                        if (cmd.getCommandType() == Command.OK) {
-                            app.removeContact(idx);
-                        }
-                        app.getDisplay().setCurrent(ContactsScreen.this);
-                    }
-                });
-                app.getDisplay().setCurrent(confirm, this);
-            }
-            return;
-        }
-        if (c == cmdDM || c == List.SELECT_COMMAND) {
+        if (c == cmdDM) {
             int idx = getSelectedContactIndex();
             if (idx >= 0 && idx < contactNames.size()) {
                 lastSelectedListIndex = getSelectedIndex();
                 app.showDMScreen(idx);
+            }
+            return;
+        }
+        if (c == List.SELECT_COMMAND) {
+            int idx = getSelectedContactIndex();
+            if (idx >= 0 && idx < contactNames.size()) {
+                lastSelectedListIndex = getSelectedIndex();
+                String name = (String) contactNames.elementAt(idx);
+                int type = (idx < contactTypes.size())
+                        ? ((Integer) contactTypes.elementAt(idx)).intValue()
+                        : ProtocolConstants.ADV_TYPE_NONE;
+                app.getDisplay().setCurrent(
+                        new ContactActionsScreen(app, idx, name, type, this));
             }
         }
     }

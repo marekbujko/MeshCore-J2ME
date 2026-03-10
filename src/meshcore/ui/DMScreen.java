@@ -14,15 +14,17 @@ public class DMScreen extends AbstractChatCanvas {
 
     private final int contactIdx;
     private final String contactName;
+    private final Displayable returnTo;
     private Command cmdResetPath;
     private Command cmdViewPath;
     private Thread titleRotationThread;
     private volatile boolean titleRotationStop;
 
-    public DMScreen(AppController app, int contactIdx, String contactName, StringBuffer dmBuf) {
+    public DMScreen(AppController app, int contactIdx, String contactName, StringBuffer dmBuf, Displayable returnTo) {
         super(app, contactName, dmBuf);
         this.contactIdx = contactIdx;
         this.contactName = contactName;
+        this.returnTo = returnTo;
         cmdViewPath = new Command("Set Path", Command.SCREEN, 4);
         cmdResetPath = new Command(buildResetPathLabel(app.getContactPathHops(contactIdx)), Command.SCREEN, 5);
         addCommand(cmdViewPath);
@@ -128,7 +130,11 @@ public class DMScreen extends AbstractChatCanvas {
     }
 
     protected void onBack() {
-        app.showContactsScreen();
+        if (returnTo != null) {
+            app.getDisplay().setCurrent(returnTo);
+        } else {
+            app.showContactsScreen();
+        }
     }
 
     protected int getMaxMessageLength() {

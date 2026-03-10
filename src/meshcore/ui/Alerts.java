@@ -14,7 +14,9 @@ public final class Alerts {
     private Alerts() {}
 
     public static void info(Display display, Displayable next, String title, String text) {
-        show(display, next, title, text, AlertType.INFO, Alert.FOREVER);
+        // Auto-close info alerts after a short delay so the user
+        // does not need to press an extra Dismiss/OK key.
+        show(display, next, title, text, AlertType.INFO, 2000);
     }
 
     public static void warning(Display display, Displayable next, String title, String text, int timeoutMs) {
