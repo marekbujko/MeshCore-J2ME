@@ -10,18 +10,17 @@ import meshcore.protocol.ProtocolConstants;
 
 /**
  * Main menu list: Channels, Contacts.
- * Options menu: Advert • Zero Hop, Advert • Flood Routed, Activity Log, Disconnect, Settings.
+ * Options menu: Advert • Zero Hop, Advert • Flood Routed, Activity Log, Disconnect, More.
  */
 public class MainMenuScreen extends List implements CommandListener {
 
     private final AppController app;
     private final Command cmdAdvertZeroHop;
     private final Command cmdAdvertFloodRouted;
-    private final Command cmdMyContactCode;
     private final Command cmdActivityLog;
     private final Command cmdDisconnect;
     private final Command cmdConnectTo;
-    private final Command cmdSettings;
+    private final Command cmdMore;
 
     public static final int IDX_NOTIFICATIONS = 0;
     public static final int IDX_FAVORITES = 1;
@@ -52,17 +51,15 @@ public class MainMenuScreen extends List implements CommandListener {
         append("Repeaters", iconRepeaters);
         cmdAdvertZeroHop = new Command("Advert • Zero Hop", Command.SCREEN, 0);
         cmdAdvertFloodRouted = new Command("Advert • Flood Routed", Command.SCREEN, 1);
-        cmdMyContactCode = new Command("Share My Contact", Command.SCREEN, 2);
         cmdActivityLog = new Command("Activity Log", Command.SCREEN, 3);
         cmdDisconnect = new Command("Disconnect", Command.SCREEN, 4);
         cmdConnectTo = new Command("Connect To", Command.SCREEN, 4);
-        cmdSettings = new Command("Settings", Command.BACK, 5);
+        cmdMore = new Command("More", Command.SCREEN, 5);
         addCommand(cmdAdvertZeroHop);
         addCommand(cmdAdvertFloodRouted);
-        addCommand(cmdMyContactCode);
         addCommand(cmdActivityLog);
         addCommand(cmdDisconnect);
-        addCommand(cmdSettings);
+        addCommand(cmdMore);
         setCommandListener(this);
     }
 
@@ -100,10 +97,6 @@ public class MainMenuScreen extends List implements CommandListener {
             showAdvertConfirm("Flood Routed", ProtocolConstants.ADVERT_FLOOD);
             return;
         }
-        if (c == cmdMyContactCode) {
-            app.showMyContactCode();
-            return;
-        }
         if (c == cmdActivityLog) {
             app.showActivityLogScreen();
             return;
@@ -113,8 +106,8 @@ public class MainMenuScreen extends List implements CommandListener {
             app.showConnectScreen();
             return;
         }
-        if (c == cmdSettings) {
-            app.showSettingsScreen();
+        if (c == cmdMore) {
+            app.getDisplay().setCurrent(new MoreMenuScreen(app, this));
             return;
         }
         if (c == List.SELECT_COMMAND) {

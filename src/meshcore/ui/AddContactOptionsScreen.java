@@ -7,8 +7,8 @@ import javax.microedition.lcdui.List;
 
 /**
  * Simple menu for adding a new contact or repeater:
- * - Add manually (name + public key)
- * - Scan QR code
+ * - Add Manually (Name + Public Key)
+ * - Scan QR Code
  */
 public final class AddContactOptionsScreen extends List implements CommandListener {
 
@@ -22,8 +22,8 @@ public final class AddContactOptionsScreen extends List implements CommandListen
         this.app = app;
         this.returnTo = returnTo;
 
-        append("Add manually (name + key)", null); // 0
-        append("Scan QR code", null);              // 1
+        append("Add Manually (Name + Public Key)", null); // 0
+        append("Scan QR Code", null);              // 1
 
         cmdBack = new Command("Back", Command.BACK, 1);
         addCommand(cmdBack);

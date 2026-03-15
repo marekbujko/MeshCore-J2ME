@@ -25,7 +25,6 @@ public class ContactsScreen extends List implements CommandListener {
     private String filterQuery;
     private final Command cmdSearch;
     private final Command cmdDM;
-    private final Command cmdAdd;
     private final Command cmdRefresh;
     private final Command cmdBack;
 
@@ -47,11 +46,9 @@ public class ContactsScreen extends List implements CommandListener {
         this.iconContact = loadIcon("/contacts.png");
         cmdSearch = new Command("Search", Command.ITEM, 0);
         cmdDM = new Command("Write Message", Command.ITEM, 1);
-        cmdAdd = new Command("Add Contact/Repeater", Command.ITEM, 2);
         cmdRefresh = new Command("Refresh", Command.ITEM, 3);
         cmdBack = new Command("Back", Command.BACK, 4);
         addCommand(cmdDM);
-        addCommand(cmdAdd);
         addCommand(cmdSearch);
         addCommand(cmdRefresh);
         addCommand(cmdBack);
@@ -148,11 +145,6 @@ public class ContactsScreen extends List implements CommandListener {
                     app.sendGetContacts();
                 }
             }).start();
-            return;
-        }
-        if (c == cmdAdd) {
-            lastSelectedListIndex = getSelectedIndex();
-            app.getDisplay().setCurrent(new AddContactOptionsScreen(app, this));
             return;
         }
         if (c == cmdDM) {

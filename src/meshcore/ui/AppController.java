@@ -56,6 +56,9 @@ public interface AppController {
     /** Full 32-byte public key for a contact, as hex. */
     String getContactPublicKeyHex(int contactIdx);
 
+    /** JAD/manifest property (e.g. MIDlet-Name, MIDlet-Version, MIDlet-Vendor). */
+    String getAppProperty(String key);
+
     void appendChannel(int channelIndex, String line);
     void appendActivityLog(String line);
     void appendDM(int contactIdx, String line);
