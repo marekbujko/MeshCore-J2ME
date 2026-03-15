@@ -328,10 +328,15 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public String getContactPublicKeyHex(int contactIdx) {
-        if (contactIdx < 0 || contactIdx >= contactStore.getKeys().size()) return "";
-        byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
-        if (key == null || key.length == 0) return "";
-        return FrameUtils.bytesToHex(key, 0, key.length);
+        // contactIdx >= 0: normal contact/repeater from contactStore
+        if (contactIdx >= 0) {
+            if (contactIdx >= contactStore.getKeys().size()) return "";
+            byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
+            if (key == null || key.length == 0) return "";
+            return FrameUtils.bytesToHex(key, 0, key.length);
+        }
+        // contactIdx < 0: treat as "self" contact (node public key)
+        return nodePublicKeyHex != null ? nodePublicKeyHex : "";
     }
 
     public void showSettingsScreen() {
@@ -368,6 +373,13 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         FavoritesScreen fav = new FavoritesScreen(this,
                 contactStore.getNames(), contactStore.getTypes(), contactStore.getKeys());
         display.setCurrent(fav);
+    }
+
+    public void showMyContactCode() {
+        String name = nodeName != null ? nodeName : "";
+        Displayable backTo = mainMenuScreen != null ? (Displayable) mainMenuScreen : (Displayable) this.mainMenuScreen;
+        // Use ShareContactScreen in "self" mode: idx = -1, type = ADV_TYPE_CHAT (mapped to type=1)
+        display.setCurrent(new ShareContactScreen(this, -1, name, ProtocolConstants.ADV_TYPE_CHAT, backTo));
     }
 
     public boolean isFavorite(int contactIdx) {
@@ -649,6 +661,30 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         } catch (IOException e) {
             appendActivityLog("[!] Remove failed");
         }
+    }
+
+    public void addManualContact(final String name, final String publicKeyHex, final int advType) {
+        if (transport == null) {
+            appendActivityLog("[!] Cannot add contact while disconnected");
+            return;
+        }
+        new Thread(new Runnable() {
+            public void run() {
+                byte[] key = FrameUtils.hexDecode(publicKeyHex);
+                if (key == null || key.length != 32) {
+                    appendActivityLog("[!] Public key must be 64 hex chars (32 bytes)");
+                    return;
+                }
+                String safeName = TextUtils.sanitizeLabel(name, 32);
+                try {
+                    MeshProtocolClient.sendAddUpdateContact(transport, key, advType, 0, new byte[0], safeName, 0L);
+                    appendActivityLog("[*] Add contact requested: " + safeName);
+                    sendGetContacts();
+                } catch (IOException e) {
+                    appendActivityLog("[!] Add contact failed");
+                }
+            }
+        }).start();
     }
 
     public void resetPath(int contactIdx) {

@@ -17,6 +17,7 @@ public class MainMenuScreen extends List implements CommandListener {
     private final AppController app;
     private final Command cmdAdvertZeroHop;
     private final Command cmdAdvertFloodRouted;
+    private final Command cmdMyContactCode;
     private final Command cmdActivityLog;
     private final Command cmdDisconnect;
     private final Command cmdConnectTo;
@@ -51,12 +52,14 @@ public class MainMenuScreen extends List implements CommandListener {
         append("Repeaters", iconRepeaters);
         cmdAdvertZeroHop = new Command("Advert • Zero Hop", Command.SCREEN, 0);
         cmdAdvertFloodRouted = new Command("Advert • Flood Routed", Command.SCREEN, 1);
-        cmdActivityLog = new Command("Activity Log", Command.SCREEN, 2);
-        cmdDisconnect = new Command("Disconnect", Command.SCREEN, 3);
-        cmdConnectTo = new Command("Connect To", Command.SCREEN, 3);
-        cmdSettings = new Command("Settings", Command.BACK, 4);
+        cmdMyContactCode = new Command("Share My Contact", Command.SCREEN, 2);
+        cmdActivityLog = new Command("Activity Log", Command.SCREEN, 3);
+        cmdDisconnect = new Command("Disconnect", Command.SCREEN, 4);
+        cmdConnectTo = new Command("Connect To", Command.SCREEN, 4);
+        cmdSettings = new Command("Settings", Command.BACK, 5);
         addCommand(cmdAdvertZeroHop);
         addCommand(cmdAdvertFloodRouted);
+        addCommand(cmdMyContactCode);
         addCommand(cmdActivityLog);
         addCommand(cmdDisconnect);
         addCommand(cmdSettings);
@@ -95,6 +98,10 @@ public class MainMenuScreen extends List implements CommandListener {
         }
         if (c == cmdAdvertFloodRouted) {
             showAdvertConfirm("Flood Routed", ProtocolConstants.ADVERT_FLOOD);
+            return;
+        }
+        if (c == cmdMyContactCode) {
+            app.showMyContactCode();
             return;
         }
         if (c == cmdActivityLog) {

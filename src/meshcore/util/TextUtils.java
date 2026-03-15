@@ -120,6 +120,70 @@ public final class TextUtils {
         return out.toString();
     }
 
+    /** URL-encode for query strings, using UTF-8-like semantics: space -> '+', others -> %HH as needed. */
+    public static String urlEncode(String s) {
+        if (s == null) return "";
+        StringBuffer out = new StringBuffer();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if ((c >= 'A' && c <= 'Z') ||
+                (c >= 'a' && c <= 'z') ||
+                (c >= '0' && c <= '9') ||
+                c == '-' || c == '_' || c == '.' || c == '~') {
+                out.append(c);
+            } else if (c == ' ') {
+                out.append('+');
+            } else {
+                int b = c;
+                if (b < 0) b += 256;
+                int hi = (b >> 4) & 0xF;
+                int lo = b & 0xF;
+                out.append('%');
+                out.append(intToHex(hi));
+                out.append(intToHex(lo));
+            }
+        }
+        return out.toString();
+    }
+
+    private static char intToHex(int v) {
+        return (char) (v < 10 ? ('0' + v) : ('A' + (v - 10)));
+    }
+
+    /** Basic URL-decoder for query values (handles + and %HH). */
+    public static String urlDecode(String s) {
+        if (s == null) return "";
+        StringBuffer out = new StringBuffer();
+        int len = s.length();
+        for (int i = 0; i < len; i++) {
+            char c = s.charAt(i);
+            if (c == '+') {
+                out.append(' ');
+            } else if (c == '%' && i + 2 < len) {
+                char c1 = s.charAt(i + 1);
+                char c2 = s.charAt(i + 2);
+                int hi = hexToInt(c1);
+                int lo = hexToInt(c2);
+                if (hi >= 0 && lo >= 0) {
+                    out.append((char) ((hi << 4) | lo));
+                    i += 2;
+                } else {
+                    out.append(c);
+                }
+            } else {
+                out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
+    private static int hexToInt(char c) {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        return -1;
+    }
+
     public static String extractDMSender(String line) {
         int s = line.indexOf('[');
         int e = (s >= 0) ? line.indexOf(']', s) : -1;

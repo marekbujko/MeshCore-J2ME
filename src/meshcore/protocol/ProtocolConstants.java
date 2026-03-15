@@ -58,11 +58,12 @@ public final class ProtocolConstants {
     public static final int PUSH_ADVERT         = 0x80;
     public static final int PUSH_PATH_UPDATED   = 0x81;
 
-    // Advert types (in RESP_CONTACT)
+    // Advert types (in RESP_CONTACT) — matches meshcore://contact/add type param
     public static final int ADV_TYPE_NONE    = 0;
-    public static final int ADV_TYPE_CHAT    = 1;
+    public static final int ADV_TYPE_CHAT    = 1;  // Companion
     public static final int ADV_TYPE_REPEATER = 2;
-    public static final int ADV_TYPE_ROOM    = 3;
+    public static final int ADV_TYPE_ROOM    = 3;  // Room Server
+    public static final int ADV_TYPE_SENSOR  = 4;
 
     // Error codes (byte in RESP_ERR frame)
     public static final int ERR_UNSUPPORTED_CMD = 1;

@@ -24,6 +24,7 @@ public interface AppController {
     void showDMScreen(int idx, Displayable returnTo);
     void showNotificationsScreen();
     void showFavoritesScreen();
+    void showMyContactCode();
     void showSettingsScreen();
     void showActivityLogScreen();
 
@@ -36,6 +37,7 @@ public interface AppController {
     void sendDirectMessage(int idx, String msg);
     void sendGetContacts();
     void removeContact(int idx);
+    void addManualContact(String name, String publicKeyHex, int advType);
     boolean isFavorite(int contactIdx);
     void addFavorite(int contactIdx);
     void removeFavorite(int contactIdx);

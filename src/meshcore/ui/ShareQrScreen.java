@@ -15,17 +15,18 @@ import com.google.zxing.TextToQRcodeImage;
 public final class ShareQrScreen extends Canvas implements CommandListener {
 
     private final AppController app;
-    private final String link;
     private final Displayable returnTo;
     private final Image qrImage;
 
     private final Command cmdBack;
 
-    public ShareQrScreen(AppController app, String link, Displayable returnTo) {
+    public ShareQrScreen(AppController app, String link, String title, Displayable returnTo) {
         this.app = app;
-        this.link = link;
         this.returnTo = returnTo;
         this.qrImage = TextToQRcodeImage.encode(link);
+        if (title != null && title.length() > 0) {
+            setTitle(title);
+        }
         this.cmdBack = new Command("Back", Command.BACK, 1);
         addCommand(cmdBack);
         setCommandListener(this);
