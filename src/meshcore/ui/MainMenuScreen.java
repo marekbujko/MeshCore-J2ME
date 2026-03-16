@@ -54,7 +54,7 @@ public class MainMenuScreen extends List implements CommandListener {
         cmdActivityLog = new Command("Activity Log", Command.SCREEN, 3);
         cmdDisconnect = new Command("Disconnect", Command.SCREEN, 4);
         cmdConnectTo = new Command("Connect To", Command.SCREEN, 4);
-        cmdMore = new Command("More", Command.SCREEN, 5);
+        cmdMore = new Command("More", Command.BACK, 5);
         addCommand(cmdAdvertZeroHop);
         addCommand(cmdAdvertFloodRouted);
         addCommand(cmdActivityLog);

@@ -25,6 +25,8 @@ public interface AppController {
     void showNotificationsScreen();
     void showFavoritesScreen();
     void showMyContactCode();
+    /** Show Share My Contact and return to the given screen on Back. */
+    void showMyContactCode(Displayable returnTo);
     void showSettingsScreen();
     void showActivityLogScreen();
 
@@ -58,6 +60,13 @@ public interface AppController {
 
     /** JAD/manifest property (e.g. MIDlet-Name, MIDlet-Version, MIDlet-Vendor). */
     String getAppProperty(String key);
+
+    /** Channel name at index. */
+    String getChannelName(int channelIndex);
+    /** Display name for channel (private channels get a prefix, e.g. "[P] name"). */
+    String getChannelDisplayName(int channelIndex);
+    /** Channel secret as 32 hex chars (stored or derived from name for public/hashtag). */
+    String getChannelSecretHex(int channelIndex);
 
     void appendChannel(int channelIndex, String line);
     void appendActivityLog(String line);

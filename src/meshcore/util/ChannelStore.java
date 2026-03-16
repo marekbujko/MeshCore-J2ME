@@ -4,12 +4,15 @@ import java.util.Vector;
 
 import meshcore.ui.ChannelListScreen;
 import meshcore.util.AppConstants;
+import meshcore.util.FrameUtils;
 
 public final class ChannelStore {
 
     private final Vector names = new Vector();
     private final Vector buffers = new Vector();
     private final Vector unreadCounts = new Vector();
+    /** Optional 32-hex secret per channel (null for public/hashtag or when not stored). */
+    private final Vector secrets = new Vector();
 
     public ChannelStore() {
         initChannels();
@@ -19,9 +22,11 @@ public final class ChannelStore {
         names.removeAllElements();
         buffers.removeAllElements();
         unreadCounts.removeAllElements();
+        secrets.removeAllElements();
         names.addElement(ChannelListScreen.PUBLIC_CHANNEL);
         buffers.addElement(new StringBuffer());
         unreadCounts.addElement(new Integer(0));
+        secrets.addElement(null);
     }
 
     public Vector getNames() {
@@ -55,10 +60,24 @@ public final class ChannelStore {
 
     /** Adds a new channel slot at the end and returns its index. */
     public int addChannel(String name) {
+        return addChannel(name, null);
+    }
+
+    /** Adds a new channel with optional secret (16 bytes). */
+    public int addChannel(String name, byte[] secretBytes) {
         names.addElement(name);
         buffers.addElement(new StringBuffer());
         unreadCounts.addElement(new Integer(0));
+        String hex = (secretBytes != null && secretBytes.length == 16)
+                ? FrameUtils.bytesToHex(secretBytes, 0, 16) : null;
+        secrets.addElement(hex);
         return names.size() - 1;
+    }
+
+    /** Stored secret (32 hex) for channel, or null if not stored. */
+    public String getSecretHex(int index) {
+        if (index < 0 || index >= secrets.size()) return null;
+        return (String) secrets.elementAt(index);
     }
 
     public void removeChannel(int index) {
@@ -66,6 +85,7 @@ public final class ChannelStore {
         names.removeElementAt(index);
         buffers.removeElementAt(index);
         unreadCounts.removeElementAt(index);
+        secrets.removeElementAt(index);
     }
 
     public void ensureUnreadSize(int size) {
@@ -101,6 +121,7 @@ public final class ChannelStore {
             names.addElement(chIdx == 0 ? ChannelListScreen.PUBLIC_CHANNEL : "");
             buffers.addElement(new StringBuffer());
             unreadCounts.addElement(new Integer(0));
+            secrets.addElement(null);
         }
     }
 }

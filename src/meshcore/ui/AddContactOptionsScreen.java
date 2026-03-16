@@ -22,7 +22,7 @@ public final class AddContactOptionsScreen extends List implements CommandListen
         this.app = app;
         this.returnTo = returnTo;
 
-        append("Add Manually (Name + Public Key)", null); // 0
+        append("Add Manually (Name + Pub Key)", null); // 0
         append("Scan QR Code", null);              // 1
 
         cmdBack = new Command("Back", Command.BACK, 1);
@@ -38,9 +38,9 @@ public final class AddContactOptionsScreen extends List implements CommandListen
         if (c == List.SELECT_COMMAND) {
             int sel = getSelectedIndex();
             if (sel == 0) {
-                app.getDisplay().setCurrent(new ManualAddContactScreen(app, returnTo));
+                app.getDisplay().setCurrent(new ManualAddContactScreen(app, this));
             } else if (sel == 1) {
-                new AddFromQrScanScreen(app, returnTo);
+                new AddFromQrScanScreen(app, this);
             }
         }
     }

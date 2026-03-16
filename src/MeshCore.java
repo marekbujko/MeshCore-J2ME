@@ -247,12 +247,12 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void showChannelScreen(int channelIndex) {
         if (channelIndex < 0 || channelIndex >= channelStore.size()) return;
         setChannelUnread(channelIndex, 0);
-        String name = channelStore.getName(channelIndex);
+        String displayName = getChannelDisplayName(channelIndex);
         StringBuffer buf = channelStore.getBuffer(channelIndex);
         try {
             meshcore.util.HistoryStore.loadChannelTailIntoBuffer(channelIndex, buf);
         } catch (Throwable ignore) {}
-        channelScreen = new ChannelScreen(this, channelIndex, name, buf);
+        channelScreen = new ChannelScreen(this, channelIndex, displayName, buf);
         display.setCurrent(channelScreen);
         trySyncMessages();
     }
@@ -265,7 +265,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         if (channelStore.containsNameIgnoreCase(name)) {
             return;
         }
-        int idx = channelStore.addChannel(name);
+        int idx = channelStore.addChannel(name, secretBytes);
         sendSetChannel(idx, name, secretBytes);
     }
 
@@ -339,6 +339,31 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         return nodePublicKeyHex != null ? nodePublicKeyHex : "";
     }
 
+    public String getChannelName(int channelIndex) {
+        if (channelIndex < 0 || channelIndex >= channelStore.size()) return "";
+        return channelStore.getName(channelIndex);
+    }
+
+    /** Display name with prefix for private channels (e.g. "[P] MyChannel"). */
+    public String getChannelDisplayName(int channelIndex) {
+        String name = getChannelName(channelIndex);
+        if (name == null || name.length() == 0) return "";
+        if (channelIndex == 0) return name;
+        if (name.equalsIgnoreCase(ChannelListScreen.PUBLIC_CHANNEL)) return name;
+        if (name.startsWith("#")) return name;
+        return "(prv) " + name;
+    }
+
+    /** Channel secret as 32 hex (stored for private, or derived from name for public/hashtag). */
+    public String getChannelSecretHex(int channelIndex) {
+        if (channelIndex < 0 || channelIndex >= channelStore.size()) return "";
+        String stored = channelStore.getSecretHex(channelIndex);
+        if (stored != null && stored.length() == 32) return stored;
+        String name = channelStore.getName(channelIndex);
+        byte[] derived = SHA256.channelSecret(name);
+        return FrameUtils.bytesToHex(derived, 0, 16);
+    }
+
     public void showSettingsScreen() {
         settingsScreen = new SettingsScreen(this, nodeName, firmwareVer,
                 nodePublicKeyHex, nodeFreq, nodeBw, nodeSf, nodeCr, nodeTxPwr);
@@ -376,10 +401,14 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void showMyContactCode() {
-        String name = nodeName != null ? nodeName : "";
         Displayable backTo = mainMenuScreen != null ? (Displayable) mainMenuScreen : (Displayable) this.mainMenuScreen;
+        showMyContactCode(backTo);
+    }
+
+    public void showMyContactCode(Displayable returnTo) {
+        String name = nodeName != null ? nodeName : "";
         // Use ShareContactScreen in "self" mode: idx = -1, type = ADV_TYPE_CHAT (mapped to type=1)
-        display.setCurrent(new ShareContactScreen(this, -1, name, ProtocolConstants.ADV_TYPE_CHAT, backTo));
+        display.setCurrent(new ShareContactScreen(this, -1, name, ProtocolConstants.ADV_TYPE_CHAT, returnTo));
     }
 
     public boolean isFavorite(int contactIdx) {

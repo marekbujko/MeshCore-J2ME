@@ -38,7 +38,7 @@ public final class MoreMenuScreen extends List implements CommandListener {
 
         append("Add Contact", loadIcon("/add-contact.png"));
         append("Add Channel", loadIcon("/add-channel.png"));
-        append("Share My Contact", loadIcon("/qr-code.png"));
+        append("Share My Contact", loadIcon("/share-black.png"));
         append("Tools", loadIcon("/tools.png"));
         append("Settings", loadIcon("/settings.png"));
         append("About", loadIcon("/about.png"));
@@ -56,11 +56,11 @@ public final class MoreMenuScreen extends List implements CommandListener {
         if (c == List.SELECT_COMMAND) {
             int sel = getSelectedIndex();
             if (sel == IDX_ADD_CONTACT) {
-                app.getDisplay().setCurrent(new AddContactOptionsScreen(app, returnTo));
+                app.getDisplay().setCurrent(new AddContactOptionsScreen(app, this));
             } else if (sel == IDX_ADD_CHANNEL) {
-                app.showChannelListScreen();
+                app.getDisplay().setCurrent(new AddChannelOptionsScreen(app, this));
             } else if (sel == IDX_SHARE_MY_CONTACT) {
-                app.showMyContactCode();
+                app.showMyContactCode(this);
             } else if (sel == IDX_TOOLS) {
                 app.getDisplay().setCurrent(new ToolsScreen(app, this));
             } else if (sel == IDX_SETTINGS) {
