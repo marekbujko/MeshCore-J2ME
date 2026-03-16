@@ -68,6 +68,13 @@ public interface AppController {
     /** Channel secret as 32 hex chars (stored or derived from name for public/hashtag). */
     String getChannelSecretHex(int channelIndex);
 
+    /** Current node name (from radio / Settings). */
+    String getNodeName();
+    /** Last battery/voltage string (e.g. "(4.18V)" or "4100mV"). */
+    String getBatteryStatus();
+    /** Latest line from the activity log (for dashboard). */
+    String getLatestActivityLogLine();
+
     void appendChannel(int channelIndex, String line);
     void appendActivityLog(String line);
     void appendDM(int contactIdx, String line);

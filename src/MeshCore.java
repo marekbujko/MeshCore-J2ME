@@ -364,6 +364,27 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         return FrameUtils.bytesToHex(derived, 0, 16);
     }
 
+    public String getNodeName() {
+        return nodeName != null ? nodeName : "";
+    }
+
+    public String getBatteryStatus() {
+        return lastBatteryStatus != null ? lastBatteryStatus : "";
+    }
+
+    public String getLatestActivityLogLine() {
+        if (activityLogBuf == null || activityLogBuf.length() == 0) return "";
+        String s = activityLogBuf.toString();
+        int last = s.lastIndexOf('\n');
+        if (last < 0) return s.trim();
+        if (last == s.length() - 1) {
+            s = s.substring(0, last);
+            last = s.lastIndexOf('\n');
+            return (last < 0 ? s : s.substring(last + 1)).trim();
+        }
+        return s.substring(last + 1).trim();
+    }
+
     public void showSettingsScreen() {
         settingsScreen = new SettingsScreen(this, nodeName, firmwareVer,
                 nodePublicKeyHex, nodeFreq, nodeBw, nodeSf, nodeCr, nodeTxPwr);
