@@ -10,6 +10,7 @@ import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.CommandListener;
 import javax.microedition.lcdui.Displayable;
 import java.util.Vector;
+import meshcore.util.ImageCache;
 import meshcore.util.TextUtils;
 
 /**
@@ -153,7 +154,7 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
         if (messages.size() == 0) {
             if (emptyStateIcon == null) {
                 try {
-                    emptyStateIcon = Image.createImage("/messages.png");
+                    emptyStateIcon = ImageCache.get("/messages.png");
                 } catch (Throwable ignore) {}
             }
             Font boldFont = Font.getFont(Font.FACE_PROPORTIONAL, Font.STYLE_BOLD, Font.SIZE_SMALL);

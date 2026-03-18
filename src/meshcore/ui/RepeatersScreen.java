@@ -8,6 +8,7 @@ import javax.microedition.lcdui.List;
 import java.util.Vector;
 
 import meshcore.protocol.ProtocolConstants;
+import meshcore.util.ImageCache;
 
 /**
  * Repeaters list screen: shows contacts with type ADV_TYPE_REPEATER.
@@ -41,11 +42,7 @@ public class RepeatersScreen extends List implements CommandListener {
     }
 
     private static Image loadIcon(String path) {
-        try {
-            return Image.createImage(path);
-        } catch (Exception e) {
-            return null;
-        }
+        return ImageCache.get(path);
     }
 
     public void refreshList() {

@@ -9,6 +9,7 @@ import java.util.Vector;
 
 import meshcore.protocol.ProtocolConstants;
 import meshcore.util.FavoriteStore;
+import meshcore.util.ImageCache;
 
 /**
  * Favorites list: shows favorite contacts. Tap to open DM or remove from favorites.
@@ -48,11 +49,7 @@ public class FavoritesScreen extends List implements CommandListener {
     }
 
     private static Image loadIcon(String path) {
-        try {
-            return Image.createImage(path);
-        } catch (Exception e) {
-            return null;
-        }
+        return ImageCache.get(path);
     }
 
     public void refreshList() {

@@ -9,6 +9,7 @@ import javax.microedition.lcdui.Graphics;
 import javax.microedition.lcdui.Image;
 
 import meshcore.protocol.ProtocolConstants;
+import meshcore.util.ImageCache;
 
 /**
  * Main menu as a Canvas: 3x2 grid (cols 0-1 = dashboard; col 2 = Notifications top, Favorites bottom),
@@ -108,11 +109,7 @@ public class MainMenuScreen extends Canvas implements CommandListener {
     }
 
     private static Image loadIcon(String path) {
-        try {
-            return Image.createImage(path);
-        } catch (Exception e) {
-            return null;
-        }
+        return ImageCache.get(path);
     }
 
     private void layout(int w, int h) {

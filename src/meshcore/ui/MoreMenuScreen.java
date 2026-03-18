@@ -6,6 +6,8 @@ import javax.microedition.lcdui.Displayable;
 import javax.microedition.lcdui.Image;
 import javax.microedition.lcdui.List;
 
+import meshcore.util.ImageCache;
+
 /**
  * More menu: Add Contact, Add Channel, Share My Contact, Tools, Settings, About.
  */
@@ -24,11 +26,7 @@ public final class MoreMenuScreen extends List implements CommandListener {
     private final Command cmdBack;
 
     private static Image loadIcon(String path) {
-        try {
-            return Image.createImage(path);
-        } catch (Exception e) {
-            return null;
-        }
+        return ImageCache.get(path);
     }
 
     public MoreMenuScreen(AppController app, Displayable returnTo) {

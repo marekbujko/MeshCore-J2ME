@@ -9,6 +9,7 @@ import javax.microedition.lcdui.TextBox;
 import javax.microedition.lcdui.TextField;
 import java.util.Vector;
 import meshcore.protocol.ProtocolConstants;
+import meshcore.util.ImageCache;
 
 /**
  * Contacts list screen: tap to open actions, refresh to sync.
@@ -99,11 +100,7 @@ public class ContactsScreen extends List implements CommandListener {
     }
 
     private static Image loadIcon(String path) {
-        try {
-            return Image.createImage(path);
-        } catch (Exception e) {
-            return null;
-        }
+        return ImageCache.get(path);
     }
 
     /** Returns the real contact index for the current list selection, or -1. */

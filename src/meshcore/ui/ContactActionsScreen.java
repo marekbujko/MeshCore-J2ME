@@ -7,6 +7,7 @@ import javax.microedition.lcdui.Image;
 import javax.microedition.lcdui.List;
 
 import meshcore.protocol.ProtocolConstants;
+import meshcore.util.ImageCache;
 import meshcore.util.TextUtils;
 
 /**
@@ -88,11 +89,7 @@ public final class ContactActionsScreen extends List implements CommandListener 
     }
 
     private static Image loadIcon(String path) {
-        try {
-            return Image.createImage(path);
-        } catch (Exception e) {
-            return null;
-        }
+        return ImageCache.get(path);
     }
 
     private void updateFavoriteRow() {

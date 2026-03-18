@@ -7,6 +7,8 @@ import javax.microedition.lcdui.Form;
 import javax.microedition.lcdui.Image;
 import javax.microedition.lcdui.ImageItem;
 
+import meshcore.util.ImageCache;
+
 /**
  * About screen: app icon, name, description, version, platform, author (from JAD/manifest).
  */
@@ -22,7 +24,7 @@ public final class AboutScreen extends Form implements CommandListener {
         this.returnTo = returnTo;
 
         try {
-            Image appIcon = Image.createImage("/icon.png");
+            Image appIcon = ImageCache.get("/icon.png");
             ImageItem iconItem = new ImageItem(null, appIcon, ImageItem.LAYOUT_LEFT, null);
             append(iconItem);
             append("\n");
