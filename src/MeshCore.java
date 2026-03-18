@@ -112,6 +112,16 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private volatile int titleRotationIndex = 0;
     private volatile boolean notificationBlinkRunning = false;
     private volatile boolean mainMenuNoisePollingRunning = false;
+    /**
+     * During initial connect/splash we suppress modal alerts to avoid freezing the UI
+     * while the device syncs old messages (many alerts one-by-one).
+     * After main menu is shown, we flush one alert per channel/DM.
+     */
+    private volatile boolean notificationSuppressed = false;
+    private final Vector pendingNotificationKeys = new Vector();
+    private final Vector pendingNotificationMessages = new Vector();
+    /** De-dup: don't show more than one alert per channel/DM while it has unread>0. */
+    private final Vector alertedNotificationKeys = new Vector();
 
     private ConnectionManager connectionManager;
     private DmSendManager dmSendManager;
@@ -254,6 +264,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void showChannelScreen(int channelIndex) {
         if (channelIndex < 0 || channelIndex >= channelStore.size()) return;
         setChannelUnread(channelIndex, 0);
+        clearAlertKey("ch:" + channelIndex);
         String displayName = getChannelDisplayName(channelIndex);
         StringBuffer buf = channelStore.getBuffer(channelIndex);
         try {
@@ -324,6 +335,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         ensureDmBuffersSize(contactStore.size());
         ensureContactUnreadSize(contactStore.size());
         setContactUnread(idx, 0);
+        clearAlertKey("dm:" + idx);
         String name = contactStore.getName(idx);
         StringBuffer buf = contactStore.getDmBuffer(idx);
         try {
@@ -475,6 +487,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     // AppController: actions
     // -----------------------------------------------------------------------
     public void connect(String host, int port) {
+        beginNotificationSuppression();
         userRequestedDisconnect = false;
         setConnectTitle("Connecting...");
         try {
@@ -485,16 +498,22 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 public void run() {
                     showMainMenu();
                     startTitleRotation();
+                    endNotificationSuppressionAndFlush();
                 }
             });
         } catch (Exception e) {
             setConnectTitle("Failed: " + e.getMessage());
             appendActivityLog("[!] Connect failed: " + e.getMessage());
             connected = false;
+            notificationSuppressed = false;
+            pendingNotificationKeys.removeAllElements();
+            pendingNotificationMessages.removeAllElements();
+            alertedNotificationKeys.removeAllElements();
         }
     }
 
     public void connectWithSplash(final String host, final int port) {
+        beginNotificationSuppression();
         Image logo = null;
         try {
             logo = Image.createImage("/logo.png");
@@ -526,12 +545,17 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                         public void run() {
                             showMainMenu();
                             startTitleRotation();
+                            endNotificationSuppressionAndFlush();
                         }
                     });
                 } catch (Exception e) {
                     final String err = e.getMessage();
                     appendActivityLog("[!] Connect failed: " + err);
                     connected = false;
+                    notificationSuppressed = false;
+                    pendingNotificationKeys.removeAllElements();
+                    pendingNotificationMessages.removeAllElements();
+                    alertedNotificationKeys.removeAllElements();
                     connectScreen = new ConnectScreen(MeshCore.this);
                     connectScreen.setTitle("Failed: " + err);
                     display.callSerially(new Runnable() {
@@ -599,6 +623,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         running = false;
         connected = false;
         keepAliveRunning = false;
+        notificationSuppressed = false;
+        pendingNotificationKeys.removeAllElements();
+        pendingNotificationMessages.removeAllElements();
+        alertedNotificationKeys.removeAllElements();
         if (connectionManager != null) {
             connectionManager.stop();
         }
@@ -958,7 +986,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 } else {
                     incChannelUnread(chIdx);
                     refreshChannelListIfShown();
-                    showIncomingNotification("New message in " + chName);
+                    queueOrShowNotification("ch:" + chIdx, "New message in " + chName);
                     updateNotificationBell();
                 }
             }
@@ -1025,7 +1053,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                     incContactUnread(cIdx);
                     refreshContactsListIfShown();
                     String from = TextUtils.extractDMSender(line);
-                    showIncomingNotification("New DM" + (from.length() > 0 ? " from " + from : ""));
+                    queueOrShowNotification(
+                            "dm:" + cIdx,
+                            "New DM" + (from.length() > 0 ? " from " + from : "")
+                    );
                     updateNotificationBell();
                 }
             }
@@ -1120,6 +1151,80 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     private void ensureContactUnreadSize(int size) {
         contactStore.ensureUnreadSize(size);
+    }
+
+    private void beginNotificationSuppression() {
+        notificationSuppressed = true;
+        pendingNotificationKeys.removeAllElements();
+        pendingNotificationMessages.removeAllElements();
+    }
+
+    private void endNotificationSuppressionAndFlush() {
+        // Keep suppression ON while flushing so we don't interleave multiple alert storms.
+        // While suppressing, we only show a single summary message, because showing
+        // many modal alerts back-to-back often results in only the last one being visible.
+        boolean hadPending = pendingNotificationKeys.size() > 0;
+
+        Vector keysSnapshot = new Vector();
+        for (int i = 0; i < pendingNotificationKeys.size(); i++) {
+            keysSnapshot.addElement(pendingNotificationKeys.elementAt(i));
+        }
+        pendingNotificationKeys.removeAllElements();
+        pendingNotificationMessages.removeAllElements();
+
+        for (int i = 0; i < keysSnapshot.size(); i++) {
+            String key = (String) keysSnapshot.elementAt(i);
+            if (!containsString(alertedNotificationKeys, key)) {
+                alertedNotificationKeys.addElement(key);
+            }
+        }
+
+        if (hadPending) {
+            showIncomingNotification("New messages received");
+        }
+        notificationSuppressed = false;
+    }
+
+    private int indexOfString(Vector v, String s) {
+        if (v == null || s == null) return -1;
+        for (int i = 0; i < v.size(); i++) {
+            String cur = (String) v.elementAt(i);
+            if (s.equals(cur)) return i;
+        }
+        return -1;
+    }
+
+    private boolean containsString(Vector v, String s) {
+        return indexOfString(v, s) >= 0;
+    }
+
+    private void clearAlertKey(String key) {
+        int idx = indexOfString(alertedNotificationKeys, key);
+        if (idx >= 0) {
+            alertedNotificationKeys.removeElementAt(idx);
+        }
+    }
+
+    private void queueOrShowNotification(String notifKey, String message) {
+        if (display == null) return;
+        if (notifKey == null) notifKey = "key:null";
+
+        if (notificationSuppressed) {
+            // Queue one-by-one notifications but de-dup by key.
+            int existing = indexOfString(pendingNotificationKeys, notifKey);
+            if (existing >= 0) {
+                pendingNotificationMessages.setElementAt(message, existing);
+            } else {
+                pendingNotificationKeys.addElement(notifKey);
+                pendingNotificationMessages.addElement(message);
+            }
+            return;
+        }
+
+        // While unread>0, show at most one modal alert per key.
+        if (containsString(alertedNotificationKeys, notifKey)) return;
+        alertedNotificationKeys.addElement(notifKey);
+        showIncomingNotification(message);
     }
 
     private void incChannelUnread(int idx) {
