@@ -180,7 +180,7 @@ public class MainMenuScreen extends Canvas implements CommandListener {
         int w = getWidth();
         int h = getHeight();
         layout(w, h);
-        g.setColor(0xE8E8E8);
+        g.setColor(0xF8F8F8);
         g.fillRect(0, 0, w, h);
         int fh = g.getFont().getHeight();
 
