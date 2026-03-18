@@ -17,6 +17,8 @@ public interface FrameHandlerListener {
     void onContactsStart();
     void onContactsEnd();
     void onStats(String title, String content);
+    /** RADIO stats (sub_type=1): noise floor in dBm. */
+    void onNoiseFloor(int noiseFloorDbm);
     void onDeviceTime(String content);
     void onBatteryUpdate(String info);
     void onError(int code);

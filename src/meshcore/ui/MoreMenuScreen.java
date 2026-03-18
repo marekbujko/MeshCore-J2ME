@@ -62,7 +62,7 @@ public final class MoreMenuScreen extends List implements CommandListener {
             } else if (sel == IDX_SHARE_MY_CONTACT) {
                 app.showMyContactCode(this);
             } else if (sel == IDX_TOOLS) {
-                app.getDisplay().setCurrent(new ToolsScreen(app, this));
+                app.showToolsScreen(this);
             } else if (sel == IDX_SETTINGS) {
                 app.showSettingsScreen();
             } else if (sel == IDX_ABOUT) {

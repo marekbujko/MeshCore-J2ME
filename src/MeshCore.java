@@ -23,11 +23,13 @@ import meshcore.util.ImageUtils;
 import meshcore.util.ParseUtils;
 import meshcore.util.SHA256;
 import meshcore.util.TextUtils;
+import meshcore.ui.ToolsScreen;
 import meshcore.ui.AppController;
 import meshcore.ui.ActivityLogScreen;
 import meshcore.ui.ChannelListScreen;
 import meshcore.ui.ConnectScreen;
 import meshcore.ui.MainMenuScreen;
+import meshcore.ui.NoiseFloorScreen;
 import meshcore.ui.ChannelScreen;
 import meshcore.ui.ContactsScreen;
 import meshcore.ui.RepeatersScreen;
@@ -98,14 +100,18 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private SettingsScreen settingsScreen;
     private RepeatersScreen repeatersScreen;
     private ActivityLogScreen activityLogScreen;
+    private ToolsScreen toolsScreen;
+    private NoiseFloorScreen noiseFloorScreen;
 
     private FrameHandler frameHandler;
+    private Integer lastNoiseFloor = null;
     private String lastBatteryStatus = "";
     private volatile boolean keepAliveRunning = false;
     private volatile boolean userRequestedDisconnect = false;
     private volatile boolean reconnectScheduled = false;
     private volatile int titleRotationIndex = 0;
     private volatile boolean notificationBlinkRunning = false;
+    private volatile boolean mainMenuNoisePollingRunning = false;
 
     private ConnectionManager connectionManager;
     private DmSendManager dmSendManager;
@@ -178,6 +184,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         }
         updateMainMenuTitle();
         display.setCurrent(mainMenuScreen);
+        startMainMenuNoisePolling();
     }
 
     /** Set main menu title: when connected rotate with voltage; when disconnected cycle Disconnected/MeshCore. */
@@ -404,6 +411,20 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void showActivityLogScreen() {
         activityLogScreen = new ActivityLogScreen(this, activityLogBuf);
         display.setCurrent(activityLogScreen);
+    }
+
+    public Integer getNoiseFloor() {
+        return lastNoiseFloor;
+    }
+
+    public void showToolsScreen(Displayable returnTo) {
+        toolsScreen = new ToolsScreen(this, returnTo);
+        display.setCurrent(toolsScreen);
+    }
+
+    public void showNoiseFloorScreen(Displayable returnTo) {
+        noiseFloorScreen = new NoiseFloorScreen(this, returnTo);
+        display.setCurrent(noiseFloorScreen);
     }
 
     public void showNotificationsScreen() {
@@ -813,6 +834,18 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         }
     }
 
+    public void sendGetRadioStats() {
+        if (transport == null) {
+            appendActivityLog("[!] Cannot get radio stats while disconnected");
+            return;
+        }
+        try {
+            MeshProtocolClient.sendGetRadioStats(transport);
+        } catch (IOException e) {
+            appendActivityLog("[!] Radio stats failed");
+        }
+    }
+
     public void sendGetDeviceTime() {
         if (transport == null) {
             appendActivityLog("[!] Cannot get device time while disconnected");
@@ -930,6 +963,34 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 }
             }
         });
+    }
+
+    /** Periodically refresh noise floor while main menu is visible. */
+    private void startMainMenuNoisePolling() {
+        if (mainMenuNoisePollingRunning) return;
+        mainMenuNoisePollingRunning = true;
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    while (running && connected) {
+                        try { Thread.sleep(3000); } catch (InterruptedException e) { break; }
+                        if (!running || !connected) break;
+                        display.callSerially(new Runnable() {
+                            public void run() {
+                                if (mainMenuScreen != null && display.getCurrent() == mainMenuScreen) {
+                                    sendGetRadioStats();
+                                } else {
+                                    // Stop polling when we leave main menu.
+                                    mainMenuNoisePollingRunning = false;
+                                }
+                            }
+                        });
+                    }
+                } finally {
+                    mainMenuNoisePollingRunning = false;
+                }
+            }
+        }).start();
     }
 
     public void appendActivityLog(final String line) {
@@ -1273,6 +1334,22 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         display.callSerially(new Runnable() {
             public void run() {
                 SettingsPresenter.showStats(set, title, content);
+            }
+        });
+    }
+
+    public void onNoiseFloor(final int noiseFloorDbm) {
+        lastNoiseFloor = new Integer(noiseFloorDbm);
+        final NoiseFloorScreen noise = noiseFloorScreen;
+        final MainMenuScreen menu = mainMenuScreen;
+        display.callSerially(new Runnable() {
+            public void run() {
+                if (noise != null && display.getCurrent() == noise) {
+                    noise.addSample(noiseFloorDbm);
+                }
+                if (menu != null && display.getCurrent() == menu) {
+                    menu.repaint();
+                }
             }
         });
     }

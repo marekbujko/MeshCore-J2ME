@@ -211,12 +211,19 @@ public final class FrameHandler {
     }
 
     private void handleStats(byte[] f) {
-        if (f.length >= 11 && (f[1] & 0xFF) == 0) {
+        if (f.length < 2) return;
+        int subType = f[1] & 0xFF;
+        if (subType == 0 && f.length >= 11) {
             int batt = (f[2] & 0xFF) | ((f[3] & 0xFF) << 8);
             if (batt > 32767) batt -= 65536;
             long uptime = FrameTransport.readUint32LE(f, 4);
             int queueLen = f[10] & 0xFF;
-            listener.onStats("Stats", "Batt: " + batt + "mV\nUptime: " + uptime + "s\nQueue: " + queueLen);
+            String content = "Batt: " + batt + "mV\nUptime: " + uptime + "s\nQueue: " + queueLen;
+            listener.onStats("Stats", content);
+        } else if (subType == 1 && f.length >= 14) {
+            int noise = (f[2] & 0xFF) | ((f[3] & 0xFF) << 8);
+            if (noise >= 32768) noise -= 65536;
+            listener.onNoiseFloor(noise);
         }
     }
 

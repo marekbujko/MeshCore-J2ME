@@ -206,12 +206,17 @@ public class MainMenuScreen extends Canvas implements CommandListener {
         g.drawString(trimForWidth(g, nodeName, dashW), leftX + ins, py, Graphics.LEFT | Graphics.TOP);
         py += fh + 4;
         g.setColor(0x606060);
-        g.drawString("Battery", leftX + ins, py, Graphics.LEFT | Graphics.TOP);
-        String battery = app.getBatteryStatus();
-        if (battery == null || battery.length() == 0) battery = "-";
+        g.drawString("Noise Floor", leftX + ins, py, Graphics.LEFT | Graphics.TOP);
+        Integer noise = app.getNoiseFloor();
+        String noiseText;
+        if (noise != null) {
+            noiseText = noise.intValue() + " dBm";
+        } else {
+            noiseText = "Loading...";
+        }
         g.setColor(0x000000);
         py += fh;
-        g.drawString(trimForWidth(g, battery, dashW), leftX + ins, py, Graphics.LEFT | Graphics.TOP);
+        g.drawString(trimForWidth(g, noiseText, dashW), leftX + ins, py, Graphics.LEFT | Graphics.TOP);
         py += fh + 4;
         g.setColor(0x606060);
         g.drawString("Latest Log", leftX + ins, py, Graphics.LEFT | Graphics.TOP);

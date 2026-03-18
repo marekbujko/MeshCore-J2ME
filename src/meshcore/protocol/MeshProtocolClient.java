@@ -133,6 +133,11 @@ public final class MeshProtocolClient {
         transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_GET_STATS, 0});
     }
 
+    /** Request RADIO stats (sub_type=1): noise_floor, last_rssi, last_snr, air times. */
+    public static void sendGetRadioStats(FrameTransport transport) throws IOException {
+        transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_GET_STATS, 1});
+    }
+
     public static void sendGetDeviceTime(FrameTransport transport) throws IOException {
         transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_GET_DEVICE_TIME});
     }

@@ -49,6 +49,7 @@ public interface AppController {
     void sendGetBattery();
     void sendRefreshSettings();
     void sendGetStats();
+    void sendGetRadioStats();
     void sendGetDeviceTime();
     void sendAdvert();
     void setAdvertType(int type);
@@ -74,6 +75,12 @@ public interface AppController {
     String getBatteryStatus();
     /** Latest line from the activity log (for dashboard). */
     String getLatestActivityLogLine();
+    /** Last noise floor from stats (dBm), or null if unknown. */
+    Integer getNoiseFloor();
+    /** Show Noise Floor screen from Tools. */
+    void showNoiseFloorScreen(Displayable returnTo);
+    /** Show Tools screen (so app can refresh noise when stats arrive). */
+    void showToolsScreen(Displayable returnTo);
 
     void appendChannel(int channelIndex, String line);
     void appendActivityLog(String line);
