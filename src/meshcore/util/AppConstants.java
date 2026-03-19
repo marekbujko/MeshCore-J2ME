@@ -35,11 +35,11 @@ public final class AppConstants {
     public static final String DM_STATUS_FAILED = "Failed";
 
     /** RMS history caps per conversation. */
-    public static final int HISTORY_MAX_DM_MESSAGES = 10;
-    public static final int HISTORY_MAX_CHANNEL_MESSAGES = 10;
+    public static final int HISTORY_MAX_DM_MESSAGES = 200;
+    public static final int HISTORY_MAX_CHANNEL_MESSAGES = 100;
 
     /** How many recent lines to load into memory when opening a chat. */
-    public static final int HISTORY_MAX_LOADED_LINES = 5;
+    public static final int HISTORY_MAX_LOADED_LINES = 10;
 
     /** Warn when history storage exceeds this (KB). Some devices struggle above 32–64 KB. */
     public static final int HISTORY_STORAGE_WARN_KB = 64;

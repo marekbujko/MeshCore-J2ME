@@ -296,6 +296,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void showChannelScreen(int channelIndex) {
         if (channelIndex < 0 || channelIndex >= channelStore.size()) return;
+        if (channelIndex > 0) {
+            String nm = channelStore.getName(channelIndex);
+            if (nm == null || nm.length() == 0) return;
+        }
         setChannelUnread(channelIndex, 0);
         clearAlertKey("ch:" + channelIndex);
         String displayName = getChannelDisplayName(channelIndex);
@@ -333,6 +337,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         if (index <= 0 || index >= channelStore.size()) return;
         sendClearChannelSlot(index);
         channelStore.removeChannel(index);
+        try {
+            meshcore.util.HistoryStore.clearChannelHistory(index);
+        } catch (Throwable ignore) {
+        }
     }
 
     /** Tell the node to clear this channel slot (empty name + zero secret). */

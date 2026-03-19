@@ -80,12 +80,17 @@ public final class ChannelStore {
         return (String) secrets.elementAt(index);
     }
 
+    /**
+     * Clears a channel slot in place (does not shift indices).
+     * Matches device protocol: slots are fixed indices; clearing mid-list must not compact,
+     * otherwise sync ({@code onChannelInfo}) reintroduces empty slots as blank UI rows.
+     */
     public void removeChannel(int index) {
-        if (index < 0 || index >= names.size()) return;
-        names.removeElementAt(index);
-        buffers.removeElementAt(index);
-        unreadCounts.removeElementAt(index);
-        secrets.removeElementAt(index);
+        if (index <= 0 || index >= names.size()) return;
+        names.setElementAt("", index);
+        ((StringBuffer) buffers.elementAt(index)).setLength(0);
+        unreadCounts.setElementAt(new Integer(0), index);
+        secrets.setElementAt(null, index);
     }
 
     public void ensureUnreadSize(int size) {
