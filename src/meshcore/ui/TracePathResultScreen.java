@@ -30,9 +30,8 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
     private boolean waiting = false;
     private boolean timedOut = false;
     private int waitingDots = 0;
-    private int scrollY = 0;
-    private int contentHeight = 0;
-    private int lastPointerY = -1;
+    private volatile int waitGeneration = 0;
+    private final UiScrollController scrollCtrl = new UiScrollController();
 
     private Font titleFont;
     private Font bodyFont;
@@ -62,9 +61,9 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
         waiting = true;
         timedOut = false;
         waitingDots = 0;
-        scrollY = 0;
-        startWaitingDots();
-        startTimeoutWatcher();
+        scrollCtrl.reset();
+        waitGeneration++;
+        startWaitThreads();
         repaint();
     }
 
@@ -82,7 +81,7 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
         lastFinalSNR4 = finalSNR4;
         forwardHops = "Path hops: " + pathHops;
         forwardDuration = (durationMs >= 0) ? ("Duration: " + durationMs + " ms") : "";
-        scrollY = 0;
+        scrollCtrl.reset();
         render();
     }
 
@@ -128,58 +127,62 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
         }
 
         // Background
-        g.setColor(0xFFFFFF);
+        g.setColor(UiTheme.BG_WHITE);
         g.fillRect(0, 0, w, h);
         int pad = 8;
         int x = pad;
         int maxW = w - (pad * 2) - 6; // leave room for scroll bar
+        int scrollY = scrollCtrl.getScrollY();
         int y = 0 - scrollY;
 
         g.setFont(titleFont);
-        g.setColor(0x1F1F1F);
+        g.setColor(UiTheme.TEXT_DARK);
 
         g.setFont(bodyFont);
-        g.setColor(0x333333);
+        g.setColor(UiTheme.TEXT_GRAY);
 
         if (!forwardDone) {
             if (timedOut) {
                 y += UiCanvasUtil.drawWrappedCentered(g, "No reply (timeout).", x, y, maxW);
                 y += UiCanvasUtil.drawWrappedCentered(g, "Press Refresh to try again.", x, y + 2, maxW);
-                contentHeight = y + scrollY + pad;
-                clampScroll(h);
+                int contentHeight = y + scrollY + pad;
+                scrollCtrl.setContentHeight(contentHeight);
+                scrollCtrl.clamp(h);
                 return;
             }
             String dots = (waitingDots == 0) ? "" : (waitingDots == 1 ? "." : (waitingDots == 2 ? ".." : "..."));
             y += UiCanvasUtil.drawWrappedCentered(g, "Waiting for reply" + dots, x, y, maxW);
-            contentHeight = y + scrollY + pad;
-            clampScroll(h);
+            int contentHeight = y + scrollY + pad;
+            scrollCtrl.setContentHeight(contentHeight);
+            scrollCtrl.clamp(h);
             return;
         }
 
         y += drawInfoRow(g, x, y, maxW, forwardHops, forwardDuration);
         y += 3;
-        g.setColor(0xD0D0D0);
+        g.setColor(UiTheme.LINE_GRAY);
         g.drawLine(x, y, x + maxW, y);
         y += 3;
         y += 4;
 
         String myNodeLabel = UiCanvasUtil.getNodeLabel(app);
-        y += drawNodeBubble(g, x, y, maxW, myNodeLabel);
+        y += UiTimelinePainter.drawNodeBubble(g, x, y, maxW, myNodeLabel);
 
         int hopCount = (forwardPath != null) ? forwardPath.length : 0;
         for (int i = 0; i < hopCount; i++) {
-            y += drawSnrArrow(g, x, y, maxW, getHopSnr(i));
-            y += drawNodeBubble(g, x, y, maxW, getRepeaterLabel(i));
+            y += UiTimelinePainter.drawSnrArrowDown(g, x, y, maxW, getHopSnr(i));
+            y += UiTimelinePainter.drawNodeBubble(g, x, y, maxW, getRepeaterLabel(i));
         }
 
         String finalSnr = formatSnr4ToDb(lastFinalSNR4);
-        y += drawSnrArrow(g, x, y, maxW, finalSnr);
-        y += drawNodeBubble(g, x, y, maxW, myNodeLabel);
+        y += UiTimelinePainter.drawSnrArrowDown(g, x, y, maxW, finalSnr);
+        y += UiTimelinePainter.drawNodeBubble(g, x, y, maxW, myNodeLabel);
 
-        contentHeight = y + scrollY + pad;
-        clampScroll(h);
+        int contentHeight = y + scrollY + pad;
+        scrollCtrl.setContentHeight(contentHeight);
+        scrollCtrl.clamp(h);
 
-        int maxScroll = getMaxScroll(h);
+        int maxScroll = scrollCtrl.getMaxScroll(h);
         if (maxScroll > 0) {
             int barX = w - 4;
             int barTop = 4;
@@ -187,41 +190,14 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
             g.setColor(0xBBBBBB);
             g.drawLine(barX, barTop, barX, barTop + barH);
             int thumbH = Math.max(10, (barH * h) / contentHeight);
-            int thumbY = barTop + ((barH - thumbH) * scrollY) / maxScroll;
-            g.setColor(0x666666);
+            int scrollYClamped = scrollCtrl.getScrollY();
+            int thumbY = barTop + ((barH - thumbH) * scrollYClamped) / maxScroll;
+            g.setColor(UiTheme.SCROLL_BAR_THUMB);
             g.fillRect(barX - 1, thumbY, 3, thumbH);
         }
     }
 
-    private int drawNodeBubble(Graphics g, int x, int y, int w, String text) {
-        int h = bodyFont.getHeight() + 8;
-        // Match main menu card gray tone.
-        g.setColor(0xF8F8F8);
-        g.fillRoundRect(x, y, w, h, 10, 10);
-        g.setColor(0x9E9E9E);
-        g.drawRoundRect(x, y, w, h, 10, 10);
-        g.setColor(0x1E344A);
-        g.drawString(text != null ? text : "", x + 6, y + 4, Graphics.LEFT | Graphics.TOP);
-        return h + 4;
-    }
-
-    private int drawSnrArrow(Graphics g, int x, int y, int w, String snr) {
-        int cx = x + (w / 2);
-        String label = "SNR " + (snr != null ? snr : "n/a");
-        g.setColor(0x444444);
-        int tw = g.getFont().stringWidth(label);
-        g.drawString(label, cx - (tw / 2), y - 3, Graphics.LEFT | Graphics.TOP);
-        int yLine = y + bodyFont.getHeight() - 3;
-        g.setColor(0x7F878E);
-        // Slightly bolder arrow: double-stroke shaft + larger head.
-        g.drawLine(cx, yLine, cx, yLine + 8);
-        g.drawLine(cx + 1, yLine, cx + 1, yLine + 8);
-        g.drawLine(cx, yLine + 8, cx - 4, yLine + 4);
-        g.drawLine(cx, yLine + 8, cx + 4, yLine + 4);
-        g.drawLine(cx + 1, yLine + 8, cx - 3, yLine + 4);
-        g.drawLine(cx + 1, yLine + 8, cx + 5, yLine + 4);
-        return bodyFont.getHeight() + 11;
-    }
+    // Bubble/arrow drawing moved to UiTimelinePainter.
 
     private int drawInfoRow(Graphics g, int x, int y, int w, String leftText, String rightText) {
         if (leftText == null) leftText = "";
@@ -251,56 +227,37 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
         return used;
     }
 
-    private void startWaitingDots() {
-        final TracePathResultScreen self = this;
+    private void startWaitThreads() {
         final javax.microedition.lcdui.Display display = app.getDisplay();
-        new Thread(new Runnable() {
-            public void run() {
-                int i = 0;
-                while (display != null) {
-                    if (forwardDone || !waiting || timedOut) break;
-                    final int d = i % 4;
-                    display.callSerially(new Runnable() {
-                        public void run() {
-                            if (display.getCurrent() == self && !forwardDone && waiting && !timedOut) {
-                                waitingDots = d;
-                                repaint();
-                            }
-                        }
-                    });
-                    i++;
-                    try { Thread.sleep(300); } catch (InterruptedException e) { break; }
-                }
-            }
-        }).start();
-    }
+        if (display == null) return;
 
-    private void startTimeoutWatcher() {
-        final TracePathResultScreen self = this;
-        final javax.microedition.lcdui.Display display = app.getDisplay();
-        final long start = System.currentTimeMillis();
-        new Thread(new Runnable() {
-            public void run() {
-                while (display != null) {
-                    if (forwardDone || !waiting || timedOut) break;
-                    if (System.currentTimeMillis() - start > TRACE_TIMEOUT_MS) break;
-                    try { Thread.sleep(200); } catch (InterruptedException e) { break; }
-                }
-                if (display != null) {
-                    if (forwardDone || !waiting || timedOut) return;
-                    if (System.currentTimeMillis() - start <= TRACE_TIMEOUT_MS) return;
-                    display.callSerially(new Runnable() {
-                        public void run() {
-                            if (display.getCurrent() != self) return;
-                            if (forwardDone || !waiting || timedOut) return;
-                            waiting = false;
-                            timedOut = true;
-                            repaint();
-                        }
-                    });
-                }
+        final UiWaitController.WaitState state = new UiWaitController.WaitState() {
+            public int getGeneration() {
+                return waitGeneration;
             }
-        }).start();
+
+            public boolean isResolved() {
+                return forwardDone;
+            }
+
+            public boolean isWaiting() {
+                return waiting && !timedOut;
+            }
+
+            public void onDot(int dotIndex) {
+                waitingDots = dotIndex;
+                repaint();
+            }
+
+            public void onTimeout() {
+                waiting = false;
+                timedOut = true;
+                repaint();
+            }
+        };
+
+        UiWaitController.startWaitingDots(display, this, state, 300, 4);
+        UiWaitController.startTimeoutWatcher(display, this, state, TRACE_TIMEOUT_MS, 200);
     }
 
     public void commandAction(Command c, Displayable d) {
@@ -320,51 +277,25 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
     protected void keyPressed(int keyCode) {
         if (!forwardDone) return;
         int action = getGameAction(keyCode);
-        int step = Math.max(12, bodyFont != null ? bodyFont.getHeight() + 6 : 16);
-        int maxScroll = getMaxScroll(getHeight());
-        if (action == Canvas.UP) {
-            scrollY -= step;
-            if (scrollY < 0) scrollY = 0;
-            repaint();
-        } else if (action == Canvas.DOWN) {
-            scrollY += step;
-            if (scrollY > maxScroll) scrollY = maxScroll;
+        int step = UiScrollController.computeStep(bodyFont);
+        if (scrollCtrl.onKey(action, step, getHeight())) {
             repaint();
         }
     }
 
     protected void pointerPressed(int x, int y) {
-        lastPointerY = y;
+        scrollCtrl.pointerPressed(y);
     }
 
     protected void pointerDragged(int x, int y) {
         if (!forwardDone) return;
-        if (lastPointerY < 0) {
-            lastPointerY = y;
-            return;
+        if (scrollCtrl.onDrag(y, getHeight())) {
+            repaint();
         }
-        int dy = y - lastPointerY;
-        lastPointerY = y;
-        int maxScroll = getMaxScroll(getHeight());
-        scrollY -= dy;
-        if (scrollY < 0) scrollY = 0;
-        if (scrollY > maxScroll) scrollY = maxScroll;
-        repaint();
     }
 
     protected void pointerReleased(int x, int y) {
-        lastPointerY = -1;
-    }
-
-    private int getMaxScroll(int viewportH) {
-        int max = contentHeight - viewportH + 6;
-        return max > 0 ? max : 0;
-    }
-
-    private void clampScroll(int viewportH) {
-        int max = getMaxScroll(viewportH);
-        if (scrollY < 0) scrollY = 0;
-        if (scrollY > max) scrollY = max;
+        scrollCtrl.pointerReleased();
     }
 }
 

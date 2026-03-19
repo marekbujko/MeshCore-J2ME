@@ -1,7 +1,5 @@
 package meshcore.ui;
 
-import java.util.Vector;
-
 import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.CommandListener;
 import javax.microedition.lcdui.Displayable;
@@ -21,7 +19,7 @@ public class PathListScreen extends List implements CommandListener {
     private final int contactIdx;
     private final Displayable returnTo;
 
-    private final Vector editablePath = new Vector();
+    private final PathEditorModel pathModel = new PathEditorModel();
     private final byte[] originalPathBytes;
     private final int initialHops;
     private final Command cmdBack;
@@ -42,11 +40,10 @@ public class PathListScreen extends List implements CommandListener {
         if (pathBytes != null) {
             originalPathBytes = new byte[pathBytes.length];
             System.arraycopy(pathBytes, 0, originalPathBytes, 0, pathBytes.length);
-            for (int i = 0; i < pathBytes.length; i++) {
-                editablePath.addElement(new Byte(pathBytes[i]));
-            }
+            pathModel.setBytes(pathBytes);
         } else {
             originalPathBytes = new byte[0];
+            pathModel.setBytes(new byte[0]);
         }
 
         cmdBack = new Command("Back", Command.BACK, 1);
@@ -68,20 +65,20 @@ public class PathListScreen extends List implements CommandListener {
 
     /** Called by RepeaterPickerScreen when user selects a repeater to add. */
     public void addHop(byte pathByte) {
-        editablePath.addElement(new Byte(pathByte));
+        pathModel.addHop(pathByte);
         refreshList();
     }
 
     private void refreshList() {
         deleteAll();
         // First row: hex representation of path bytes for quick visual reference.
-        String hex = buildHexSummary();
+        String hex = PathHexCodec.formatBytesCsv(pathModel.toByteArray());
         if (hex.length() == 0) {
             append("Path: (none)", null);
         } else {
             append("Path: " + hex, null);
         }
-        if (editablePath.size() == 0) {
+        if (pathModel.size() == 0) {
             if (initialHops < 0) {
                 setTitle("Path: Flood");
                 append("Flood (no path yet)", null);
@@ -90,9 +87,9 @@ public class PathListScreen extends List implements CommandListener {
                 append("Direct (no repeaters)", null);
             }
         } else {
-            setTitle(buildTitle(editablePath.size()));
-            for (int i = 0; i < editablePath.size(); i++) {
-                byte b = ((Byte) editablePath.elementAt(i)).byteValue();
+            setTitle(buildTitle(pathModel.size()));
+            for (int i = 0; i < pathModel.size(); i++) {
+                byte b = pathModel.get(i);
                 String name = app.getRepeaterNameForPathByte(b);
                 String label = (name != null && name.length() > 0)
                         ? ((i + 1) + ". " + name)
@@ -110,96 +107,32 @@ public class PathListScreen extends List implements CommandListener {
     }
 
     private byte[] getEditablePathBytes() {
-        int n = editablePath.size();
-        byte[] b = new byte[n];
-        for (int i = 0; i < n; i++) {
-            b[i] = ((Byte) editablePath.elementAt(i)).byteValue();
-        }
-        return b;
+        return pathModel.toByteArray();
     }
 
     /** True if current editable path differs from original path bytes. */
     private boolean isModified() {
-        if (editablePath.size() != originalPathBytes.length) return true;
+        if (pathModel.size() != originalPathBytes.length) return true;
         for (int i = 0; i < originalPathBytes.length; i++) {
-            byte b = ((Byte) editablePath.elementAt(i)).byteValue();
-            if (b != originalPathBytes[i]) return true;
+            if (pathModel.get(i) != originalPathBytes[i]) return true;
         }
         return false;
-    }
-
-    /** Build comma-separated hex summary of current path bytes, e.g. \"64, 6F\". */
-    private String buildHexSummary() {
-        if (editablePath.size() == 0) return "";
-        StringBuffer sb = new StringBuffer();
-        for (int i = 0; i < editablePath.size(); i++) {
-            int v = ((Byte) editablePath.elementAt(i)).byteValue() & 0xFF;
-            if (i > 0) sb.append(", ");
-            if (v < 16) sb.append('0');
-            String hx = Integer.toHexString(v).toUpperCase();
-            sb.append(hx);
-        }
-        return sb.toString();
-    }
-
-    /** Parse user-typed hex list like \"64, 6F\" into bytes; returns null on error. */
-    private byte[] parseHexList(String text) {
-        Vector out = new Vector();
-        StringBuffer tok = new StringBuffer();
-        int len = text != null ? text.length() : 0;
-        for (int i = 0; i < len; i++) {
-            char c = text.charAt(i);
-            if (c == ',' || c == ' ' || c == ';') {
-                if (!processHexToken(tok, out)) {
-                    return null;
-                }
-                tok.setLength(0);
-            } else {
-                tok.append(c);
-            }
-        }
-        if (!processHexToken(tok, out)) {
-            return null;
-        }
-        int n = out.size();
-        if (n > 64) n = 64;
-        byte[] result = new byte[n];
-        for (int i = 0; i < n; i++) {
-            result[i] = ((Byte) out.elementAt(i)).byteValue();
-        }
-        return result;
-    }
-
-    private boolean processHexToken(StringBuffer tokBuf, Vector out) {
-        if (tokBuf == null) return true;
-        String tok = tokBuf.toString().trim();
-        if (tok.length() == 0) return true;
-        if (tok.startsWith("0x") || tok.startsWith("0X")) {
-            tok = tok.substring(2);
-        }
-        if (tok.length() == 0 || tok.length() > 2) return false;
-        for (int i = 0; i < tok.length(); i++) {
-            char ch = tok.charAt(i);
-            boolean hex = (ch >= '0' && ch <= '9')
-                    || (ch >= 'a' && ch <= 'f')
-                    || (ch >= 'A' && ch <= 'F');
-            if (!hex) return false;
-        }
-        int v;
-        try {
-            v = Integer.parseInt(tok, 16);
-        } catch (NumberFormatException e) {
-            return false;
-        }
-        out.addElement(new Byte((byte) v));
-        return true;
     }
 
     public void commandAction(Command c, Displayable d) {
         if (c == cmdBack) {
             handleBack();
         } else if (c == cmdAddHop) {
-            app.getDisplay().setCurrent(new RepeaterPickerScreen(app, this, returnTo));
+            app.getDisplay().setCurrent(new RepeaterPickerScreen(
+                    app,
+                    new RepeaterPickerScreen.Listener() {
+                        public void onRepeaterPicked(byte pathByte) {
+                            addHop(pathByte);
+                        }
+                    },
+                    this,
+                    "Select Repeater"
+            ));
         } else if (c == List.SELECT_COMMAND) {
             // Tapping the first row ("Path: ...") opens the hex editor with hint.
             int sel = getSelectedIndex();
@@ -208,8 +141,8 @@ public class PathListScreen extends List implements CommandListener {
             }
         } else if (c == cmdRemoveLast) {
             int sel = getSelectedIndex() - 1; // subtract header row
-            if (sel >= 0 && sel < editablePath.size()) {
-                editablePath.removeElementAt(sel);
+            if (sel >= 0 && sel < pathModel.size()) {
+                pathModel.removeAt(sel);
                 refreshList();
             }
         } else if (c == cmdEditHex) {
@@ -264,7 +197,9 @@ public class PathListScreen extends List implements CommandListener {
 
     private void openHexEditor() {
         final PathListScreen self = this;
-        final TextBox tb = new TextBox("Enter Path Manually", buildHexSummary(), 128, TextField.ANY);
+        final TextBox tb = new TextBox("Enter Path Manually",
+                PathHexCodec.formatBytesCsv(pathModel.toByteArray()),
+                128, TextField.ANY);
         Command cmdOk = new Command("Save", Command.OK, 1);
         Command cmdCancel = new Command("Cancel", Command.BACK, 2);
         tb.addCommand(cmdOk);
@@ -272,16 +207,13 @@ public class PathListScreen extends List implements CommandListener {
         tb.setCommandListener(new CommandListener() {
             public void commandAction(Command cmd, Displayable disp) {
                 if (cmd.getCommandType() == Command.OK) {
-                    byte[] parsed = parseHexList(tb.getString());
+                    byte[] parsed = PathHexCodec.parseHexList(tb.getString());
                     if (parsed == null) {
                         Alerts.warning(app.getDisplay(), tb, "Invalid bytes",
                                 "Use hex like 64, 6F (comma separated).", 2000);
                         return;
                     }
-                    editablePath.removeAllElements();
-                    for (int i = 0; i < parsed.length; i++) {
-                        editablePath.addElement(new Byte(parsed[i]));
-                    }
+                    pathModel.setBytes(parsed);
                     refreshList();
                 }
                 app.getDisplay().setCurrent(self);

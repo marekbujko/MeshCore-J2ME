@@ -1,15 +1,11 @@
 package meshcore.ui;
 
-import java.util.Vector;
-
 import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.CommandListener;
 import javax.microedition.lcdui.Displayable;
 import javax.microedition.lcdui.List;
 import javax.microedition.lcdui.TextBox;
 import javax.microedition.lcdui.TextField;
-
-import meshcore.util.FrameUtils;
 
 /**
  * Manual trace path selector.
@@ -20,7 +16,7 @@ public final class TracePathSelectScreen extends List implements CommandListener
     private final AppController app;
     private final Displayable returnTo;
 
-    private final Vector selectedPathBytes = new Vector(); // Byte
+    private final PathEditorModel pathModel = new PathEditorModel();
 
     private final Command cmdBack;
     private final Command cmdAddHop;
@@ -64,16 +60,16 @@ public final class TracePathSelectScreen extends List implements CommandListener
 
         byte[] pathBytes = getSelectedPathBytes();
         int hops = (pathBytes != null) ? pathBytes.length : 0;
-        String csv = formatBytesCsv(pathBytes);
+        String csv = PathHexCodec.formatBytesCsv(pathBytes);
 
         String summary = "Trace Path: " + (hops == 0 ? "(none)" : csv);
         append(summary, null);
 
-        if (selectedPathBytes.size() == 0) {
+        if (pathModel.size() == 0) {
             append("(no repeaters selected)", null);
         } else {
-            for (int i = 0; i < selectedPathBytes.size(); i++) {
-                byte b = ((Byte) selectedPathBytes.elementAt(i)).byteValue();
+            for (int i = 0; i < pathModel.size(); i++) {
+                byte b = pathModel.get(i);
                 String name = app.getRepeaterNameForPathByte(b);
                 if (name == null || name.length() == 0) {
                     name = "Repeater " + (i + 1);
@@ -84,32 +80,13 @@ public final class TracePathSelectScreen extends List implements CommandListener
         setTitle("Trace Path (" + hops + " hop" + (hops == 1 ? "" : "s") + ")");
     }
 
-    private static String formatBytesCsv(byte[] b) {
-        if (b == null || b.length == 0) return "";
-        StringBuffer sb = new StringBuffer();
-        for (int i = 0; i < b.length; i++) {
-            if (i > 0) sb.append(", ");
-            int v = b[i] & 0xFF;
-            String h = Integer.toHexString(v).toUpperCase();
-            if (h.length() == 1) h = "0" + h;
-            sb.append(h);
-        }
-        return sb.toString();
-    }
-
     private byte[] getSelectedPathBytes() {
-        int n = selectedPathBytes.size();
-        if (n == 0) return new byte[0];
-        byte[] b = new byte[n];
-        for (int i = 0; i < n; i++) {
-            b[i] = ((Byte) selectedPathBytes.elementAt(i)).byteValue();
-        }
-        return b;
+        return pathModel.toByteArray();
     }
 
-    /** Called by TraceRepeaterPickerScreen when user selects a repeater to add. */
+    /** Called by RepeaterPickerScreen when user selects a repeater to add. */
     public void addHop(byte pathByte) {
-        selectedPathBytes.addElement(new Byte(pathByte));
+        pathModel.addHop(pathByte);
         refreshList();
     }
 
@@ -119,27 +96,34 @@ public final class TracePathSelectScreen extends List implements CommandListener
             return;
         }
         if (c == cmdAddHop) {
-            app.getDisplay().setCurrent(new TraceRepeaterPickerScreen(app, this));
+            app.getDisplay().setCurrent(new RepeaterPickerScreen(
+                    app,
+                    new RepeaterPickerScreen.Listener() {
+                        public void onRepeaterPicked(byte pathByte) {
+                            addHop(pathByte);
+                        }
+                    },
+                    this,
+                    "Select Repeater"
+            ));
             return;
         }
         if (c == cmdClear) {
-            selectedPathBytes.removeAllElements();
+            pathModel.clear();
             refreshList();
             return;
         }
         if (c == cmdRemoveLast) {
             int sel = getSelectedIndex() - 1; // summary row is first
-            if (sel >= 0 && sel < selectedPathBytes.size()) {
-                selectedPathBytes.removeElementAt(sel);
+            if (!pathModel.removeAt(sel)) {
+                pathModel.removeLast();
             } else {
-                int n = selectedPathBytes.size();
-                if (n > 0) selectedPathBytes.removeElementAt(n - 1);
             }
             refreshList();
             return;
         }
         if (c == cmdAutoReturnPath) {
-            int n = selectedPathBytes.size();
+            int n = pathModel.size();
             if (n <= 1) {
                 Alerts.warning(app.getDisplay(), this, "Trace Path",
                         "Need at least 2 repeaters for auto return.", 2000);
@@ -148,7 +132,7 @@ public final class TracePathSelectScreen extends List implements CommandListener
             // Append reverse path excluding latest hop:
             // [A, B, C] -> [A, B, C, B, A]
             for (int i = n - 2; i >= 0; i--) {
-                selectedPathBytes.addElement(selectedPathBytes.elementAt(i));
+                pathModel.addHop(pathModel.get(i));
             }
             refreshList();
             return;
@@ -178,19 +162,6 @@ public final class TracePathSelectScreen extends List implements CommandListener
         }
     }
 
-    private String buildHexSummary() {
-        byte[] b = getSelectedPathBytes();
-        if (b == null || b.length == 0) return "";
-        StringBuffer sb = new StringBuffer();
-        for (int i = 0; i < b.length; i++) {
-            if (i > 0) sb.append(", ");
-            int v = b[i] & 0xFF;
-            if (v < 16) sb.append('0');
-            sb.append(Integer.toHexString(v).toUpperCase());
-        }
-        return sb.toString();
-    }
-
     private void openHexEditorWithHint() {
         final TracePathSelectScreen self = this;
         javax.microedition.lcdui.Alert a = Alerts.confirm(
@@ -213,7 +184,10 @@ public final class TracePathSelectScreen extends List implements CommandListener
 
     private void openHexEditor() {
         final TracePathSelectScreen self = this;
-        final TextBox tb = new TextBox("Enter Path Manually", buildHexSummary(), 128, TextField.ANY);
+        final TextBox tb = new TextBox("Enter Path Manually",
+                PathHexCodec.formatBytesCsv(getSelectedPathBytes()),
+                128,
+                TextField.ANY);
         Command cmdOk = new Command("Save", Command.OK, 1);
         Command cmdCancel = new Command("Cancel", Command.BACK, 2);
         tb.addCommand(cmdOk);
@@ -221,68 +195,19 @@ public final class TracePathSelectScreen extends List implements CommandListener
         tb.setCommandListener(new CommandListener() {
             public void commandAction(Command cmd, Displayable disp) {
                 if (cmd.getCommandType() == Command.OK) {
-                    byte[] parsed = parseHexList(tb.getString());
+                    byte[] parsed = PathHexCodec.parseHexList(tb.getString());
                     if (parsed == null) {
                         Alerts.warning(app.getDisplay(), tb, "Invalid bytes",
                                 "Use hex like 64, 6F (comma separated).", 2000);
                         return;
                     }
-                    selectedPathBytes.removeAllElements();
-                    for (int i = 0; i < parsed.length; i++) {
-                        selectedPathBytes.addElement(new Byte(parsed[i]));
-                    }
+                    pathModel.setBytes(parsed);
                     refreshList();
                 }
                 app.getDisplay().setCurrent(self);
             }
         });
         app.getDisplay().setCurrent(tb);
-    }
-
-    private byte[] parseHexList(String text) {
-        Vector out = new Vector();
-        StringBuffer tok = new StringBuffer();
-        int len = text != null ? text.length() : 0;
-        for (int i = 0; i < len; i++) {
-            char c = text.charAt(i);
-            if (c == ',' || c == ' ' || c == ';') {
-                if (!processHexToken(tok, out)) return null;
-                tok.setLength(0);
-            } else {
-                tok.append(c);
-            }
-        }
-        if (!processHexToken(tok, out)) return null;
-        int n = out.size();
-        if (n > 64) n = 64;
-        byte[] result = new byte[n];
-        for (int i = 0; i < n; i++) {
-            result[i] = ((Byte) out.elementAt(i)).byteValue();
-        }
-        return result;
-    }
-
-    private boolean processHexToken(StringBuffer tokBuf, Vector out) {
-        if (tokBuf == null) return true;
-        String tok = tokBuf.toString().trim();
-        if (tok.length() == 0) return true;
-        if (tok.startsWith("0x") || tok.startsWith("0X")) tok = tok.substring(2);
-        if (tok.length() == 0 || tok.length() > 2) return false;
-        for (int i = 0; i < tok.length(); i++) {
-            char ch = tok.charAt(i);
-            boolean hex = (ch >= '0' && ch <= '9')
-                    || (ch >= 'a' && ch <= 'f')
-                    || (ch >= 'A' && ch <= 'F');
-            if (!hex) return false;
-        }
-        int v;
-        try {
-            v = Integer.parseInt(tok, 16);
-        } catch (NumberFormatException e) {
-            return false;
-        }
-        out.addElement(new Byte((byte) v));
-        return true;
     }
 }
 

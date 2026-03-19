@@ -27,9 +27,8 @@ public final class PingZeroHopScreen extends Canvas implements CommandListener {
     private volatile String snrBack = "n/a";
     private volatile String hopsLabel = "";
     private volatile String durationLabel = "";
-    private int scrollY = 0;
-    private int contentHeight = 0;
-    private int lastPointerY = -1;
+    private volatile int waitGeneration = 0;
+    private final UiScrollController scrollCtrl = new UiScrollController();
 
     private Font titleFont;
     private Font bodyFont;
@@ -45,15 +44,15 @@ public final class PingZeroHopScreen extends Canvas implements CommandListener {
         setCommandListener(this);
 
         showWaiting();
-        startTimeoutWatcher();
-        startWaitingDots();
     }
 
     private void showWaiting() {
         resolved = false;
         waiting = true;
         dots = 0;
-        scrollY = 0;
+        scrollCtrl.reset();
+        waitGeneration++;
+        startWaitThreads();
         repaint();
     }
 
@@ -73,65 +72,46 @@ public final class PingZeroHopScreen extends Canvas implements CommandListener {
                 : (String.valueOf(pathHops) + " hops");
         this.hopsLabel = hopsLabel;
         this.durationLabel = (durationMs >= 0) ? (durationMs + " ms") : "";
-        scrollY = 0;
+        scrollCtrl.reset();
         repaint();
     }
 
-    private void startTimeoutWatcher() {
-        final PingZeroHopScreen self = this;
+    private void startWaitThreads() {
         final javax.microedition.lcdui.Display display = app.getDisplay();
-        final long start = System.currentTimeMillis();
-        new Thread(new Runnable() {
-            public void run() {
-                while (display != null) {
-                    if (self.resolved) break;
-                    if (System.currentTimeMillis() - start > PING_TIMEOUT_MS) break;
-                    try { Thread.sleep(200); } catch (InterruptedException e) { break; }
-                }
-                if (display != null) {
-                    if (self.resolved) return;
-                    display.callSerially(new Runnable() {
-                        public void run() {
-                            if (display.getCurrent() != self) return;
-                            if (self.resolved) return;
-                            resolved = true;
-                            waiting = false;
-                            repeaterName = "";
-                            snrForward = "n/a";
-                            snrBack = "n/a";
-                            hopsLabel = "—";
-                            durationLabel = "";
-                            repaint();
-                        }
-                    });
-                }
-            }
-        }).start();
-    }
+        if (display == null) return;
 
-    private void startWaitingDots() {
-        final PingZeroHopScreen self = this;
-        final javax.microedition.lcdui.Display display = app.getDisplay();
-        new Thread(new Runnable() {
-            public void run() {
-                int i = 0;
-                while (display != null) {
-                    if (self.resolved) break;
-                    if (!self.waiting) break;
-                    final int vv = i % 4;
-                    display.callSerially(new Runnable() {
-                        public void run() {
-                            if (display.getCurrent() == self && !self.resolved && self.waiting) {
-                                self.dots = vv;
-                                self.repaint();
-                            }
-                        }
-                    });
-                    i++;
-                    try { Thread.sleep(300); } catch (InterruptedException e) { break; }
-                }
+        final UiWaitController.WaitState state = new UiWaitController.WaitState() {
+            public int getGeneration() {
+                return waitGeneration;
             }
-        }).start();
+
+            public boolean isResolved() {
+                return resolved;
+            }
+
+            public boolean isWaiting() {
+                return waiting;
+            }
+
+            public void onDot(int dotIndex) {
+                dots = dotIndex;
+                repaint();
+            }
+
+            public void onTimeout() {
+                resolved = true;
+                waiting = false;
+                repeaterName = "";
+                snrForward = "n/a";
+                snrBack = "n/a";
+                hopsLabel = "—";
+                durationLabel = "";
+                repaint();
+            }
+        };
+
+        UiWaitController.startWaitingDots(display, this, state, 300, 4);
+        UiWaitController.startTimeoutWatcher(display, this, state, PING_TIMEOUT_MS, 200);
     }
 
     protected void paint(Graphics g) {
@@ -139,7 +119,7 @@ public final class PingZeroHopScreen extends Canvas implements CommandListener {
         int h = getHeight();
 
         // Background (same spirit as trace path canvas).
-        g.setColor(0xFFFFFF);
+        g.setColor(UiTheme.BG_WHITE);
         g.fillRect(0, 0, w, h);
 
         if (bodyFont == null) {
@@ -150,15 +130,17 @@ public final class PingZeroHopScreen extends Canvas implements CommandListener {
         int pad = 8;
         int x = pad;
         int maxW = w - (pad * 2);
+        int scrollY = scrollCtrl.getScrollY();
         int y = 0 - scrollY;
 
         g.setFont(titleFont);
-        g.setColor(0x1F1F1F);
+        g.setColor(UiTheme.TEXT_DARK);
 
         g.setFont(bodyFont);
         int lineH = bodyFont.getHeight();
-        g.setColor(0x333333);
+        g.setColor(UiTheme.TEXT_GRAY);
 
+        int contentHeight;
         if (waiting && !resolved) {
             String base = "Waiting for reply";
             String dotsStr = "";
@@ -169,29 +151,31 @@ public final class PingZeroHopScreen extends Canvas implements CommandListener {
             else dotsStr = "...";
             y += UiCanvasUtil.drawWrappedCentered(g, base + dotsStr, x, y, maxW);
             contentHeight = y + scrollY + pad;
-            clampScroll(h);
+            scrollCtrl.setContentHeight(contentHeight);
+            scrollCtrl.clamp(h);
         } else {
             if (repeaterName != null && repeaterName.length() > 0) {
                 if (durationLabel != null && durationLabel.length() > 0) {
                     y += UiCanvasUtil.drawWrappedCentered(g, "Duration: " + durationLabel, x, y, maxW);
                 }
                 y += 3;
-                g.setColor(0xD0D0D0);
+                g.setColor(UiTheme.LINE_GRAY);
                 g.drawLine(x, y, x + maxW, y);
                 y += 7;
 
                 String myNode = UiCanvasUtil.getNodeLabel(app);
-                y += drawNodeBubble(g, x, y, maxW, myNode);
-                y += drawSnrDualArrows(g, x, y, maxW, snrForward, snrBack);
-                y += drawNodeBubble(g, x, y, maxW, repeaterName);
+                y += UiTimelinePainter.drawNodeBubble(g, x, y, maxW, myNode);
+                y += UiTimelinePainter.drawSnrDualArrows(g, x, y, maxW, snrForward, snrBack);
+                y += UiTimelinePainter.drawNodeBubble(g, x, y, maxW, repeaterName);
             } else {
                 y += UiCanvasUtil.drawWrappedCentered(g, "No reply (timeout).", x, y, maxW);
             }
             contentHeight = y + scrollY + pad;
-            clampScroll(h);
+            scrollCtrl.setContentHeight(contentHeight);
+            scrollCtrl.clamp(h);
         }
 
-        int maxScroll = getMaxScroll(h);
+        int maxScroll = scrollCtrl.getMaxScroll(h);
         if (maxScroll > 0) {
             int barX = w - 4;
             int barTop = 4;
@@ -199,54 +183,14 @@ public final class PingZeroHopScreen extends Canvas implements CommandListener {
             g.setColor(0xBBBBBB);
             g.drawLine(barX, barTop, barX, barTop + barH);
             int thumbH = Math.max(10, (barH * h) / contentHeight);
-            int thumbY = barTop + ((barH - thumbH) * scrollY) / maxScroll;
-            g.setColor(0x666666);
+            int scrollYClamped = scrollCtrl.getScrollY();
+            int thumbY = barTop + ((barH - thumbH) * scrollYClamped) / maxScroll;
+            g.setColor(UiTheme.SCROLL_BAR_THUMB);
             g.fillRect(barX - 1, thumbY, 3, thumbH);
         }
     }
 
-    private int drawNodeBubble(Graphics g, int x, int y, int w, String text) {
-        int h = bodyFont.getHeight() + 8;
-        g.setColor(0xF8F8F8);
-        g.fillRoundRect(x, y, w, h, 10, 10);
-        g.setColor(0x9E9E9E);
-        g.drawRoundRect(x, y, w, h, 10, 10);
-        g.setColor(0x1E344A);
-        g.drawString(text != null ? text : "", x + 6, y + 4, Graphics.LEFT | Graphics.TOP);
-        return h + 4;
-    }
-
-    // Connector block: left SNR + down arrow, right SNR + up arrow.
-    private int drawSnrDualArrows(Graphics g, int x, int y, int w, String snrThere, String snrBackVal) {
-        int leftX = x + (w / 4);
-        int rightX = x + ((w * 3) / 4);
-        String leftLabel = "SNR " + (snrThere != null ? snrThere : "n/a");
-        String rightLabel = "SNR " + (snrBackVal != null ? snrBackVal : "n/a");
-        g.setColor(0x444444);
-        int twL = g.getFont().stringWidth(leftLabel);
-        int twR = g.getFont().stringWidth(rightLabel);
-        g.drawString(leftLabel, leftX - (twL / 2), y - 3, Graphics.LEFT | Graphics.TOP);
-        g.drawString(rightLabel, rightX - (twR / 2), y - 3, Graphics.LEFT | Graphics.TOP);
-
-        int yLineTop = y + bodyFont.getHeight() - 3;
-        int yLineBottom = yLineTop + 8;
-        g.setColor(0x7F878E);
-        // Left: down arrow (there)
-        g.drawLine(leftX, yLineTop, leftX, yLineBottom);
-        g.drawLine(leftX + 1, yLineTop, leftX + 1, yLineBottom);
-        g.drawLine(leftX, yLineBottom, leftX - 4, yLineBottom - 4);
-        g.drawLine(leftX, yLineBottom, leftX + 4, yLineBottom - 4);
-        g.drawLine(leftX + 1, yLineBottom, leftX - 3, yLineBottom - 4);
-        g.drawLine(leftX + 1, yLineBottom, leftX + 5, yLineBottom - 4);
-        // Right: up arrow (back)
-        g.drawLine(rightX, yLineBottom, rightX, yLineTop);
-        g.drawLine(rightX + 1, yLineBottom, rightX + 1, yLineTop);
-        g.drawLine(rightX, yLineTop, rightX - 4, yLineTop + 4);
-        g.drawLine(rightX, yLineTop, rightX + 4, yLineTop + 4);
-        g.drawLine(rightX + 1, yLineTop, rightX - 3, yLineTop + 4);
-        g.drawLine(rightX + 1, yLineTop, rightX + 5, yLineTop + 4);
-        return bodyFont.getHeight() + 11;
-    }
+    // Bubble/arrow drawing moved to UiTimelinePainter.
 
     public void commandAction(Command c, Displayable d) {
         if (c == cmdBack) {
@@ -261,51 +205,25 @@ public final class PingZeroHopScreen extends Canvas implements CommandListener {
     protected void keyPressed(int keyCode) {
         if (waiting && !resolved) return;
         int action = getGameAction(keyCode);
-        int step = Math.max(12, bodyFont != null ? bodyFont.getHeight() + 6 : 16);
-        int maxScroll = getMaxScroll(getHeight());
-        if (action == Canvas.UP) {
-            scrollY -= step;
-            if (scrollY < 0) scrollY = 0;
-            repaint();
-        } else if (action == Canvas.DOWN) {
-            scrollY += step;
-            if (scrollY > maxScroll) scrollY = maxScroll;
+        int step = UiScrollController.computeStep(bodyFont);
+        if (scrollCtrl.onKey(action, step, getHeight())) {
             repaint();
         }
     }
 
     protected void pointerPressed(int x, int y) {
-        lastPointerY = y;
+        scrollCtrl.pointerPressed(y);
     }
 
     protected void pointerDragged(int x, int y) {
         if (waiting && !resolved) return;
-        if (lastPointerY < 0) {
-            lastPointerY = y;
-            return;
+        if (scrollCtrl.onDrag(y, getHeight())) {
+            repaint();
         }
-        int dy = y - lastPointerY;
-        lastPointerY = y;
-        int maxScroll = getMaxScroll(getHeight());
-        scrollY -= dy;
-        if (scrollY < 0) scrollY = 0;
-        if (scrollY > maxScroll) scrollY = maxScroll;
-        repaint();
     }
 
     protected void pointerReleased(int x, int y) {
-        lastPointerY = -1;
-    }
-
-    private int getMaxScroll(int viewportH) {
-        int max = contentHeight - viewportH + 6;
-        return max > 0 ? max : 0;
-    }
-
-    private void clampScroll(int viewportH) {
-        int max = getMaxScroll(viewportH);
-        if (scrollY < 0) scrollY = 0;
-        if (scrollY > max) scrollY = max;
+        scrollCtrl.pointerReleased();
     }
 }
 

@@ -13,16 +13,20 @@ import javax.microedition.lcdui.List;
  */
 public class RepeaterPickerScreen extends List implements CommandListener {
 
+    public interface Listener {
+        void onRepeaterPicked(byte pathByte);
+    }
+
     private final AppController app;
-    private final PathListScreen pathScreen;
+    private final Listener listener;
     private final Displayable returnTo;
     private final Vector repeaterIndices = new Vector();
     private final Command cmdBack = new Command("Back", Command.BACK, 1);
 
-    public RepeaterPickerScreen(AppController app, PathListScreen pathScreen, Displayable returnTo) {
-        super("Select Repeater", List.IMPLICIT);
+    public RepeaterPickerScreen(AppController app, Listener listener, Displayable returnTo, String title) {
+        super(title != null ? title : "Select Repeater", List.IMPLICIT);
         this.app = app;
-        this.pathScreen = pathScreen;
+        this.listener = listener;
         this.returnTo = returnTo;
         Vector indices = app.getRepeaterIndices();
         for (int i = 0; i < indices.size(); i++) {
@@ -35,7 +39,7 @@ public class RepeaterPickerScreen extends List implements CommandListener {
             String keyHex = app.getRepeaterPublicKeyHex(idx);
             if (keyHex != null && keyHex.length() > 0) {
                 // keyHex is already formatted like "<b5919f3d...efb7de3a>"
-                append(name + " | " + keyHex, null);
+                append(name + " " + keyHex, null);
             } else {
                 append(name, null);
             }
@@ -49,7 +53,7 @@ public class RepeaterPickerScreen extends List implements CommandListener {
 
     public void commandAction(Command c, Displayable d) {
         if (c == cmdBack) {
-            app.getDisplay().setCurrent(pathScreen);
+            app.getDisplay().setCurrent(returnTo);
             return;
         }
         if (c == List.SELECT_COMMAND && repeaterIndices.size() > 0) {
@@ -57,9 +61,9 @@ public class RepeaterPickerScreen extends List implements CommandListener {
             if (sel >= 0 && sel < repeaterIndices.size()) {
                 int idx = ((Integer) repeaterIndices.elementAt(sel)).intValue();
                 byte pathByte = app.getRepeaterPathByte(idx);
-                pathScreen.addHop(pathByte);
+                if (listener != null) listener.onRepeaterPicked(pathByte);
             }
-            app.getDisplay().setCurrent(pathScreen);
+            app.getDisplay().setCurrent(returnTo);
         }
     }
 }
