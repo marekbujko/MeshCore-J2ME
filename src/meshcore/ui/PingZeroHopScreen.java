@@ -150,14 +150,10 @@ public final class PingZeroHopScreen extends Canvas implements CommandListener {
         int pad = 8;
         int x = pad;
         int maxW = w - (pad * 2);
-        int y = pad - scrollY;
+        int y = 0 - scrollY;
 
         g.setFont(titleFont);
         g.setColor(0x1F1F1F);
-        y += drawWrappedCentered(g, "Ping (Zero Hop)", x, y, maxW) + 2;
-        g.setColor(0xD0D0D0);
-        g.drawLine(x, y, x + maxW, y);
-        y += 3;
 
         g.setFont(bodyFont);
         int lineH = bodyFont.getHeight();
@@ -171,25 +167,25 @@ public final class PingZeroHopScreen extends Canvas implements CommandListener {
             else if (di == 1) dotsStr = ".";
             else if (di == 2) dotsStr = "..";
             else dotsStr = "...";
-            y += drawWrappedCentered(g, base + dotsStr, x, y, maxW);
+            y += UiCanvasUtil.drawWrappedCentered(g, base + dotsStr, x, y, maxW);
             contentHeight = y + scrollY + pad;
             clampScroll(h);
         } else {
             if (repeaterName != null && repeaterName.length() > 0) {
                 if (durationLabel != null && durationLabel.length() > 0) {
-                    y += drawWrappedCentered(g, "Duration: " + durationLabel, x, y, maxW);
+                    y += UiCanvasUtil.drawWrappedCentered(g, "Duration: " + durationLabel, x, y, maxW);
                 }
                 y += 3;
                 g.setColor(0xD0D0D0);
                 g.drawLine(x, y, x + maxW, y);
                 y += 7;
 
-                String myNode = getMyNodeLabel();
+                String myNode = UiCanvasUtil.getNodeLabel(app);
                 y += drawNodeBubble(g, x, y, maxW, myNode);
                 y += drawSnrDualArrows(g, x, y, maxW, snrForward, snrBack);
                 y += drawNodeBubble(g, x, y, maxW, repeaterName);
             } else {
-                y += drawWrappedCentered(g, "No reply (timeout).", x, y, maxW);
+                y += UiCanvasUtil.drawWrappedCentered(g, "No reply (timeout).", x, y, maxW);
             }
             contentHeight = y + scrollY + pad;
             clampScroll(h);
@@ -250,74 +246,6 @@ public final class PingZeroHopScreen extends Canvas implements CommandListener {
         g.drawLine(rightX + 1, yLineTop, rightX - 3, yLineTop + 4);
         g.drawLine(rightX + 1, yLineTop, rightX + 5, yLineTop + 4);
         return bodyFont.getHeight() + 11;
-    }
-
-    private String getMyNodeLabel() {
-        String n = app.getNodeName();
-        if (n == null) return "My Node";
-        n = n.trim();
-        return n.length() > 0 ? n : "My Node";
-    }
-
-    private int drawWrapped(Graphics g, String text, int x, int y, int maxWidth) {
-        if (text == null) text = "";
-        int lineH = g.getFont().getHeight();
-        int startY = y;
-        int n = text.length();
-        int i = 0;
-        while (i < n) {
-            while (i < n && text.charAt(i) == ' ') i++;
-            if (i >= n) break;
-            int end = i;
-            int lastFitSpace = -1;
-            while (end < n) {
-                if (text.charAt(end) == ' ') lastFitSpace = end;
-                String s = text.substring(i, end + 1);
-                if (g.getFont().stringWidth(s) > maxWidth) break;
-                end++;
-            }
-            int cut;
-            if (end >= n) cut = n;
-            else if (lastFitSpace >= i) cut = lastFitSpace;
-            else cut = end > i ? end : (i + 1);
-            String line = text.substring(i, cut);
-            g.drawString(line, x, y, Graphics.LEFT | Graphics.TOP);
-            y += lineH;
-            i = (cut < n && text.charAt(cut) == ' ') ? cut + 1 : cut;
-        }
-        return y - startY;
-    }
-
-    private int drawWrappedCentered(Graphics g, String text, int x, int y, int maxWidth) {
-        if (text == null) text = "";
-        int lineH = g.getFont().getHeight();
-        int startY = y;
-        int n = text.length();
-        int i = 0;
-        while (i < n) {
-            while (i < n && text.charAt(i) == ' ') i++;
-            if (i >= n) break;
-            int end = i;
-            int lastFitSpace = -1;
-            while (end < n) {
-                if (text.charAt(end) == ' ') lastFitSpace = end;
-                String s = text.substring(i, end + 1);
-                if (g.getFont().stringWidth(s) > maxWidth) break;
-                end++;
-            }
-            int cut;
-            if (end >= n) cut = n;
-            else if (lastFitSpace >= i) cut = lastFitSpace;
-            else cut = end > i ? end : (i + 1);
-            String line = text.substring(i, cut);
-            int tw = g.getFont().stringWidth(line);
-            int drawX = x + ((maxWidth - tw) / 2);
-            if (drawX < x) drawX = x;
-            g.drawString(line, drawX, y, Graphics.LEFT | Graphics.TOP);
-            y += lineH;
-            i = (cut < n && text.charAt(cut) == ' ') ? cut + 1 : cut;
-        }
-        return y - startY;
     }
 
     public void commandAction(Command c, Displayable d) {

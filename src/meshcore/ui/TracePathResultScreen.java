@@ -133,44 +133,37 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
         int pad = 8;
         int x = pad;
         int maxW = w - (pad * 2) - 6; // leave room for scroll bar
-        int y = pad - scrollY;
+        int y = 0 - scrollY;
 
         g.setFont(titleFont);
         g.setColor(0x1F1F1F);
-        y += drawWrappedCentered(g, "Trace Path", x, y, maxW) + 2;
-        g.setColor(0xD0D0D0);
-        g.drawLine(x, y, x + maxW, y);
-        y += 3;
 
         g.setFont(bodyFont);
         g.setColor(0x333333);
 
         if (!forwardDone) {
             if (timedOut) {
-                y += drawWrappedCentered(g, "No reply (timeout).", x, y, maxW);
-                y += drawWrappedCentered(g, "Press Refresh to try again.", x, y + 2, maxW);
+                y += UiCanvasUtil.drawWrappedCentered(g, "No reply (timeout).", x, y, maxW);
+                y += UiCanvasUtil.drawWrappedCentered(g, "Press Refresh to try again.", x, y + 2, maxW);
                 contentHeight = y + scrollY + pad;
                 clampScroll(h);
                 return;
             }
             String dots = (waitingDots == 0) ? "" : (waitingDots == 1 ? "." : (waitingDots == 2 ? ".." : "..."));
-            y += drawWrappedCentered(g, "Waiting for reply" + dots, x, y, maxW);
+            y += UiCanvasUtil.drawWrappedCentered(g, "Waiting for reply" + dots, x, y, maxW);
             contentHeight = y + scrollY + pad;
             clampScroll(h);
             return;
         }
 
-        y += drawWrappedCentered(g, forwardHops, x, y, maxW);
-        if (forwardDuration != null && forwardDuration.length() > 0) {
-            y += drawWrappedCentered(g, forwardDuration, x, y, maxW);
-        }
+        y += drawInfoRow(g, x, y, maxW, forwardHops, forwardDuration);
         y += 3;
         g.setColor(0xD0D0D0);
         g.drawLine(x, y, x + maxW, y);
         y += 3;
         y += 4;
 
-        String myNodeLabel = getMyNodeLabel();
+        String myNodeLabel = UiCanvasUtil.getNodeLabel(app);
         y += drawNodeBubble(g, x, y, maxW, myNodeLabel);
 
         int hopCount = (forwardPath != null) ? forwardPath.length : 0;
@@ -230,85 +223,32 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
         return bodyFont.getHeight() + 11;
     }
 
-    private String getMyNodeLabel() {
-        String n = app.getNodeName();
-        if (n == null) return "My Node";
-        n = n.trim();
-        if (n.length() == 0) return "My Node";
-        return n;
-    }
+    private int drawInfoRow(Graphics g, int x, int y, int w, String leftText, String rightText) {
+        if (leftText == null) leftText = "";
+        if (rightText == null) rightText = "";
+        rightText = rightText.trim();
 
-    private int drawWrapped(Graphics g, String text, int x, int y, int maxWidth) {
-        if (text == null) text = "";
-        int lineH = g.getFont().getHeight();
-        int startY = y;
-        int n = text.length();
-        int i = 0;
-        while (i < n) {
-            while (i < n && text.charAt(i) == ' ') i++;
-            if (i >= n) break;
-            int end = i;
-            int lastFitSpace = -1;
-            while (end < n) {
-                if (text.charAt(end) == ' ') lastFitSpace = end;
-                String s = text.substring(i, end + 1);
-                if (g.getFont().stringWidth(s) > maxWidth) {
-                    break;
-                }
-                end++;
-            }
-            int cut;
-            if (end >= n) {
-                cut = n;
-            } else if (lastFitSpace >= i) {
-                cut = lastFitSpace;
-            } else {
-                cut = end > i ? end : (i + 1);
-            }
-            String line = text.substring(i, cut);
-            g.drawString(line, x, y, Graphics.LEFT | Graphics.TOP);
-            y += lineH;
-            i = (cut < n && text.charAt(cut) == ' ') ? cut + 1 : cut;
+        // If right side is empty, keep centered style.
+        if (rightText.length() == 0) {
+            return UiCanvasUtil.drawWrappedCentered(g, leftText, x, y, w);
         }
-        return y - startY;
-    }
 
-    private int drawWrappedCentered(Graphics g, String text, int x, int y, int maxWidth) {
-        if (text == null) text = "";
+        int lw = g.getFont().stringWidth(leftText);
+        int rw = g.getFont().stringWidth(rightText);
+        int gap = 8;
         int lineH = g.getFont().getHeight();
-        int startY = y;
-        int n = text.length();
-        int i = 0;
-        while (i < n) {
-            while (i < n && text.charAt(i) == ' ') i++;
-            if (i >= n) break;
-            int end = i;
-            int lastFitSpace = -1;
-            while (end < n) {
-                if (text.charAt(end) == ' ') lastFitSpace = end;
-                String s = text.substring(i, end + 1);
-                if (g.getFont().stringWidth(s) > maxWidth) {
-                    break;
-                }
-                end++;
-            }
-            int cut;
-            if (end >= n) {
-                cut = n;
-            } else if (lastFitSpace >= i) {
-                cut = lastFitSpace;
-            } else {
-                cut = end > i ? end : (i + 1);
-            }
-            String line = text.substring(i, cut);
-            int tw = g.getFont().stringWidth(line);
-            int drawX = x + ((maxWidth - tw) / 2);
-            if (drawX < x) drawX = x;
-            g.drawString(line, drawX, y, Graphics.LEFT | Graphics.TOP);
-            y += lineH;
-            i = (cut < n && text.charAt(cut) == ' ') ? cut + 1 : cut;
+
+        // If both fit, render on one line: left and right aligned.
+        if (lw + gap + rw <= w) {
+            g.drawString(leftText, x, y, Graphics.LEFT | Graphics.TOP);
+            g.drawString(rightText, x + w, y, Graphics.RIGHT | Graphics.TOP);
+            return lineH;
         }
-        return y - startY;
+
+        // Fallback: keep readable on small screens.
+        int used = UiCanvasUtil.drawWrappedCentered(g, leftText, x, y, w);
+        used += UiCanvasUtil.drawWrappedCentered(g, rightText, x, y + used, w);
+        return used;
     }
 
     private void startWaitingDots() {
