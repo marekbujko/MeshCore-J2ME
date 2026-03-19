@@ -15,6 +15,10 @@ public final class ContactStore {
     private final Vector lastAdvert = new Vector();
     private final Vector dmBuffers = new Vector();
     private final Vector unreadCounts = new Vector();
+    /** Advert latitude * 1E6 (int32). */
+    private final Vector advLatE6 = new Vector();
+    /** Advert longitude * 1E6 (int32). */
+    private final Vector advLonE6 = new Vector();
 
     public Vector getNames() {
         return names;
@@ -109,6 +113,26 @@ public final class ContactStore {
 
     public Vector getUnreadCounts() {
         return unreadCounts;
+    }
+
+    public Vector getAdvLatE6() {
+        return advLatE6;
+    }
+
+    public Vector getAdvLonE6() {
+        return advLonE6;
+    }
+
+    public int getAdvLatE6(int index) {
+        if (index < 0 || index >= advLatE6.size()) return Integer.MIN_VALUE;
+        Integer v = (Integer) advLatE6.elementAt(index);
+        return (v != null) ? v.intValue() : Integer.MIN_VALUE;
+    }
+
+    public int getAdvLonE6(int index) {
+        if (index < 0 || index >= advLonE6.size()) return Integer.MIN_VALUE;
+        Integer v = (Integer) advLonE6.elementAt(index);
+        return (v != null) ? v.intValue() : Integer.MIN_VALUE;
     }
 
     public void appendDmLine(int contactIdx, String line) {

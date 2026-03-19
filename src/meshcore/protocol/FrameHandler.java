@@ -19,9 +19,12 @@ public final class FrameHandler {
     private final Vector contactPathBytes;
     private final Vector contactFlags;
     private final Vector contactLastAdvert;
+    private final Vector contactAdvLatE6;
+    private final Vector contactAdvLonE6;
 
     public FrameHandler(FrameHandlerListener listener, Vector contactNames, Vector contactKeys, Vector contactTypes,
-                        Vector contactPathHops, Vector contactPathBytes, Vector contactFlags, Vector contactLastAdvert) {
+                        Vector contactPathHops, Vector contactPathBytes, Vector contactFlags, Vector contactLastAdvert,
+                        Vector contactAdvLatE6, Vector contactAdvLonE6) {
         this.listener = listener;
         this.contactNames = contactNames;
         this.contactKeys = contactKeys;
@@ -30,6 +33,8 @@ public final class FrameHandler {
         this.contactPathBytes = contactPathBytes;
         this.contactFlags = contactFlags;
         this.contactLastAdvert = contactLastAdvert;
+        this.contactAdvLatE6 = contactAdvLatE6;
+        this.contactAdvLonE6 = contactAdvLonE6;
     }
 
     public void handleFrame(byte[] f) {
@@ -47,6 +52,8 @@ public final class FrameHandler {
             contactPathBytes.removeAllElements();
             contactFlags.removeAllElements();
             contactLastAdvert.removeAllElements();
+            contactAdvLatE6.removeAllElements();
+            contactAdvLonE6.removeAllElements();
             listener.onContactsStart();
         } else if (code == ProtocolConstants.RESP_CONTACT) {
             handleContact(f);
@@ -112,12 +119,20 @@ public final class FrameHandler {
             nodePublicKey = new byte[32];
             System.arraycopy(f, 4, nodePublicKey, 0, 32);
         }
+        int advLatE6 = Integer.MIN_VALUE;
+        int advLonE6 = Integer.MIN_VALUE;
+        if (f.length >= 44) {
+            long uLat = FrameTransport.readUint32LE(f, 36);
+            long uLon = FrameTransport.readUint32LE(f, 40);
+            advLatE6 = (uLat > 2147483647L) ? (int) (uLat - 4294967296L) : (int) uLat;
+            advLonE6 = (uLon > 2147483647L) ? (int) (uLon - 4294967296L) : (int) uLon;
+        }
         long freqRaw = f.length > 55 ? FrameTransport.readUint32LE(f, 48) : 0;
         long bwRaw = f.length > 59 ? FrameTransport.readUint32LE(f, 52) : 0;
         int sf = f.length > 56 ? f[56] & 0xFF : 0;
         int cr = f.length > 57 ? f[57] & 0xFF : 0;
         String name = f.length > 58 ? FrameUtils.extractVarchar(f, 58) : "";
-        listener.onSelfInfo(name, txPwr, freqRaw, bwRaw, sf, cr, nodePublicKey);
+        listener.onSelfInfo(name, txPwr, freqRaw, bwRaw, sf, cr, nodePublicKey, advLatE6, advLonE6);
     }
 
     private void handleContact(byte[] f) {
@@ -156,6 +171,19 @@ public final class FrameHandler {
             long lastAdv = f.length >= 136 ? FrameTransport.readUint32LE(f, 132) : 0;
             contactFlags.addElement(new Integer(flags));
             contactLastAdvert.addElement(new Long(lastAdv));
+
+            // RESP_CODE_CONTACT includes adv_lat/adv_lon as signed int32 fixed-point (value * 1E6).
+            int advLatE6 = Integer.MIN_VALUE;
+            int advLonE6 = Integer.MIN_VALUE;
+            if (f.length >= 144) {
+                long uLat = FrameTransport.readUint32LE(f, 136);
+                long uLon = FrameTransport.readUint32LE(f, 140);
+                // Convert unsigned 32-bit to signed 32-bit.
+                advLatE6 = (uLat > 2147483647L) ? (int) (uLat - 4294967296L) : (int) uLat;
+                advLonE6 = (uLon > 2147483647L) ? (int) (uLon - 4294967296L) : (int) uLon;
+            }
+            contactAdvLatE6.addElement(new Integer(advLatE6));
+            contactAdvLonE6.addElement(new Integer(advLonE6));
         }
     }
 

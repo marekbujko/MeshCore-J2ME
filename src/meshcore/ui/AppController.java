@@ -96,6 +96,11 @@ public interface AppController {
     void clearDmHistory(int contactIdx);
     int getContactPathHops(int contactIdx);
     byte[] getContactPathBytes(int contactIdx);
+    long getContactLastAdvertSecs(int contactIdx);
+    int getContactAdvLatE6(int contactIdx);
+    int getContactAdvLonE6(int contactIdx);
+    int getNodeAdvLatE6();
+    int getNodeAdvLonE6();
     String getRepeaterNameForPathByte(byte pathByte);
     java.util.Vector getRepeaterIndices();
     byte getRepeaterPathByte(int contactIdx);

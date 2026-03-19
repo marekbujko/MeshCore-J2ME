@@ -92,6 +92,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private int nodeSf = 10;
     private int nodeCr = 5;
     private int nodeTxPwr = 20;
+    private int nodeAdvLatE6 = Integer.MIN_VALUE;
+    private int nodeAdvLonE6 = Integer.MIN_VALUE;
     private int advertType = 0; // 0 = Zero hop, 1 = Flood (per protocol)
 
     // Screen references (for UI updates from background threads)
@@ -165,7 +167,18 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 });
             }
         });
-        frameHandler = new FrameHandler(this, contactStore.getNames(), contactStore.getKeys(), contactStore.getTypes(), contactStore.getPathHops(), contactStore.getPathBytes(), contactStore.getContactFlags(), contactStore.getLastAdvert());
+        frameHandler = new FrameHandler(
+                this,
+                contactStore.getNames(),
+                contactStore.getKeys(),
+                contactStore.getTypes(),
+                contactStore.getPathHops(),
+                contactStore.getPathBytes(),
+                contactStore.getContactFlags(),
+                contactStore.getLastAdvert(),
+                contactStore.getAdvLatE6(),
+                contactStore.getAdvLonE6()
+        );
         connectionManager = new ConnectionManager(new ConnectionManager.Listener() {
             public void onFrame(byte[] frame) {
                 frameHandler.handleFrame(frame);
@@ -1233,6 +1246,26 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         return contactStore.getPathBytes(contactIdx);
     }
 
+    public long getContactLastAdvertSecs(int contactIdx) {
+        return contactStore.getLastAdvert(contactIdx);
+    }
+
+    public int getContactAdvLatE6(int contactIdx) {
+        return contactStore.getAdvLatE6(contactIdx);
+    }
+
+    public int getContactAdvLonE6(int contactIdx) {
+        return contactStore.getAdvLonE6(contactIdx);
+    }
+
+    public int getNodeAdvLatE6() {
+        return nodeAdvLatE6;
+    }
+
+    public int getNodeAdvLonE6() {
+        return nodeAdvLonE6;
+    }
+
     public String getRepeaterNameForPathByte(byte pathByte) {
         Vector keys = contactStore.getKeys();
         Vector names = contactStore.getNames();
@@ -1493,7 +1526,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         refreshSettingsNodeIfShown();
     }
 
-    public void onSelfInfo(String name, int txPwr, long freq, long bw, int sf, int cr, byte[] nodePublicKey) {
+    public void onSelfInfo(String name, int txPwr, long freq, long bw, int sf, int cr,
+                           byte[] nodePublicKey, int advLatE6, int advLonE6) {
         String newKeyHex = (nodePublicKey != null && nodePublicKey.length >= 32)
             ? FrameUtils.bytesToHex(nodePublicKey, 0, 32) : null;
         if (newKeyHex != null) {
@@ -1505,6 +1539,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         nodeBw = bw;
         nodeSf = sf;
         nodeCr = cr;
+        nodeAdvLatE6 = advLatE6;
+        nodeAdvLonE6 = advLonE6;
         appendActivityLog("[*] Node: " + nodeName);
         refreshSettingsNodeIfShown();
         trySyncMessages();

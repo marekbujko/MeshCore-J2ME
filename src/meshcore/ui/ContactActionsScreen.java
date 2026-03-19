@@ -133,10 +133,14 @@ public final class ContactActionsScreen extends List implements CommandListener 
     }
 
     private void showDetails() {
-        // For now, just show contact index and type; can be expanded later.
         String typeStr = isRepeater ? "Repeater" : "Contact";
-        Alerts.info(app.getDisplay(), this, "Details",
-                "Type: " + typeStr + "\nIndex: " + contactIdx);
+        app.getDisplay().setCurrent(new ContactDetailsScreen(
+                app,
+                contactIdx,
+                getTitle(),
+                contactType,
+                this
+        ));
     }
 
     private void showFavoriteInfo() {

@@ -12,7 +12,8 @@ public interface FrameHandlerListener {
     void sendGetContacts();
 
     void onDeviceInfo(String firmwareVer);
-    void onSelfInfo(String nodeName, int txPwr, long freq, long bw, int sf, int cr, byte[] nodePublicKey);
+    void onSelfInfo(String nodeName, int txPwr, long freq, long bw, int sf, int cr,
+                    byte[] nodePublicKey, int advLatE6, int advLonE6);
     void onChannelInfo(int channelIndex, String name);
     void onContactsStart();
     void onContactsEnd();

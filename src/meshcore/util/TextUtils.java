@@ -323,5 +323,70 @@ public final class TextUtils {
         if ((year % 100) != 0) return true;
         return (year % 400) == 0;
     }
+
+    /** Format epoch seconds as "19/March/2026 23:46". */
+    public static String formatEpochDateTimeVerbose(long epochSecs) {
+        if (epochSecs <= 0) return String.valueOf(epochSecs);
+
+        long totalSeconds = epochSecs;
+        int min = (int) ((totalSeconds / 60L) % 60L);
+        int hour = (int) ((totalSeconds / 3600L) % 24L);
+        long totalDays = totalSeconds / 86400L;
+
+        int year = 1970;
+        while (true) {
+            int daysInYear = isLeapYear(year) ? 366 : 365;
+            if (totalDays >= daysInYear) {
+                totalDays -= daysInYear;
+                year++;
+            } else {
+                break;
+            }
+        }
+
+        int[] monthDays = new int[]{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+        if (isLeapYear(year)) monthDays[1] = 29;
+
+        int month = 0; // 0..11
+        while (month < 12 && totalDays >= monthDays[month]) {
+            totalDays -= monthDays[month];
+            month++;
+        }
+        int day = (int) totalDays + 1;
+        return day + "/" + monthNameLong(month) + "/" + year + " " + twoDigits(hour) + ":" + twoDigits(min);
+    }
+
+    /** Compact age formatter used in Details screens: 12s / 7m / 3h / 2d. */
+    public static String formatAgeCompact(long seconds) {
+        if (seconds < 60) return seconds + "s";
+        long mins = seconds / 60;
+        if (mins < 60) return mins + "m";
+        long hrs = mins / 60;
+        if (hrs < 24) return hrs + "h";
+        long days = hrs / 24;
+        return days + "d";
+    }
+
+    private static String twoDigits(int v) {
+        return (v < 10 ? "0" : "") + v;
+    }
+
+    private static String monthNameLong(int month0) {
+        switch (month0) {
+            case 0: return "January";
+            case 1: return "February";
+            case 2: return "March";
+            case 3: return "April";
+            case 4: return "May";
+            case 5: return "June";
+            case 6: return "July";
+            case 7: return "August";
+            case 8: return "September";
+            case 9: return "October";
+            case 10: return "November";
+            case 11: return "December";
+            default: return "Unknown";
+        }
+    }
 }
 
