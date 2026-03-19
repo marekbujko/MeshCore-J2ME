@@ -79,6 +79,8 @@ public final class FrameHandler {
             handleChannelInfo(f);
         } else if (code == ProtocolConstants.RESP_ERR) {
             if (f.length > 1) listener.onError(f[1] & 0xFF);
+        } else if (code == ProtocolConstants.PUSH_TRACE_DATA) {
+            handleTraceData(f);
         }
     }
 
@@ -201,6 +203,39 @@ public final class FrameHandler {
             }
             listener.onBatteryUpdate(s);
         }
+    }
+
+    private void handleTraceData(byte[] f) {
+        // PUSH_TRACE_DATA (0x89) layout:
+        // [0]   code
+        // [1]   reserved (0)
+        // [2]   path_len
+        // [3]   flags
+        // [4..7]   tag (uint32 LE)
+        // [8..11]  auth_code (uint32 LE)
+        // [12..]   path_hashes[path_len], path_snrs[path_len], final_snr(int8)
+        if (f.length < 12 + 1) return;
+        if (f.length < 14) return;
+
+        int pathLen = f[2] & 0xFF;
+        int flags = f[3] & 0xFF;
+        long tag = (f.length >= 8) ? FrameTransport.readUint32LE(f, 4) : 0;
+        long auth = (f.length >= 12) ? FrameTransport.readUint32LE(f, 8) : 0;
+
+        int off = 12;
+        int need = off + pathLen + pathLen + 1;
+        if (f.length < need) return;
+
+        byte[] hashes = new byte[pathLen];
+        System.arraycopy(f, off, hashes, 0, pathLen);
+        off += pathLen;
+
+        byte[] snrs = new byte[pathLen];
+        System.arraycopy(f, off, snrs, 0, pathLen);
+        off += pathLen;
+
+        int finalSnr4 = f[off]; // signed int8
+        listener.onTraceData(flags, tag, auth, hashes, snrs, finalSnr4);
     }
 
     private void handleDeviceTime(byte[] f) {

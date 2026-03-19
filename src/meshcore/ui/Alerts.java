@@ -31,7 +31,13 @@ public final class Alerts {
         String safeText = (text != null && text.length() > 0) ? text : "";
         Alert a = new Alert(safeTitle, safeText, null, type);
         a.setTimeout(timeoutMs);
-        display.setCurrent(a, next);
+        try {
+            display.setCurrent(a, next);
+        } catch (IllegalArgumentException e) {
+            // Some emulator/implementations reject setCurrent(Alert,next) for
+            // certain current screens. Fallback to showing only the alert.
+            display.setCurrent(a);
+        }
     }
 
     /**

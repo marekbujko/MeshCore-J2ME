@@ -221,8 +221,7 @@ public final class ContactActionsScreen extends List implements CommandListener 
     }
 
     private void openPingInfo() {
-        Alerts.info(app.getDisplay(), this, "Ping (Zero Hop)",
-                "Ping (Zero Hop) is not implemented yet.");
+        app.pingRepeaterZeroHop(contactIdx);
     }
 }
 

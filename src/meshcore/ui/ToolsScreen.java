@@ -38,7 +38,7 @@ public final class ToolsScreen extends List implements CommandListener {
         if (c == List.SELECT_COMMAND) {
             int sel = getSelectedIndex();
             if (sel == IDX_TRACE) {
-                Alerts.info(app.getDisplay(), this, "Trace Path", "Manual trace path is not implemented yet.");
+                app.getDisplay().setCurrent(new TracePathSelectScreen(app, this));
             } else if (sel == IDX_NOISE) {
                 app.showNoiseFloorScreen(this);
             }

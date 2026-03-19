@@ -27,6 +27,7 @@ public final class ProtocolConstants {
     public static final int CMD_GET_STATS         = 56;
     public static final int CMD_GET_CHANNEL       = 31;
     public static final int CMD_SET_CHANNEL       = 32;
+    public static final int CMD_SEND_TRACE_PATH  = 36;
 
     /** Advert type: second byte in CMD_SEND_SELF_ADVERT frame (0 = zero-hop, 1 = flood) */
     public static final int ADVERT_ZERO_HOP = 0;
@@ -57,6 +58,7 @@ public final class ProtocolConstants {
     public static final int PUSH_SEND_CONFIRMED = 0x82;
     public static final int PUSH_ADVERT         = 0x80;
     public static final int PUSH_PATH_UPDATED   = 0x81;
+    public static final int PUSH_TRACE_DATA   = 0x89;
 
     // Advert types (in RESP_CONTACT) — matches meshcore://contact/add type param
     public static final int ADV_TYPE_NONE    = 0;

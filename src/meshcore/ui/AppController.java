@@ -45,6 +45,12 @@ public interface AppController {
     void removeFavorite(int contactIdx);
     void resetPath(int contactIdx);
     void updateContactPath(int contactIdx, byte[] newPath);
+    /** Trace path ping for repeater: sends TRACE packet using zero-hop/direct sending. */
+    void pingRepeaterZeroHop(int contactIdx);
+    /** Manual trace path: send forward path, then show results. */
+    void tracePathManual(byte[] forwardPath, Displayable returnTo);
+    /** Re-run the same forward trace path and update the given result screen. */
+    void tracePathManualRefresh(byte[] forwardPath, TracePathResultScreen resultScreen);
     void saveSettings();
     void sendGetBattery();
     void sendRefreshSettings();

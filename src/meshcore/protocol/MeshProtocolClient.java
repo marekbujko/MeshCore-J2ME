@@ -154,6 +154,30 @@ public final class MeshProtocolClient {
         transport.sendFrame(new byte[]{(byte) ProtocolConstants.CMD_SYNC_NEXT_MESSAGE});
     }
 
+    /**
+     * Send TRACE packet for trace-path / zero-hop ping.
+     * Frame format:
+     *  [0]     CMD_SEND_TRACE_PATH (36)
+     *  [1..4] tag (uint32 LE)
+     *  [5..8] auth_code (uint32 LE)
+     *  [9]     flags (1 byte)
+     *  [10..]  path bytes (path_len >= 1)
+     */
+    public static void sendTracePath(FrameTransport transport,
+                                       int tag,
+                                       int authCode,
+                                       int flags,
+                                       byte[] path) throws IOException {
+        if (path == null || path.length < 1) return;
+        byte[] f = new byte[1 + 4 + 4 + 1 + path.length];
+        f[0] = (byte) ProtocolConstants.CMD_SEND_TRACE_PATH;
+        FrameTransport.writeUint32LE(f, 1, tag);
+        FrameTransport.writeUint32LE(f, 5, authCode);
+        f[9] = (byte) (flags & 0xFF);
+        System.arraycopy(path, 0, f, 10, path.length);
+        transport.sendFrame(f);
+    }
+
     public static long[] applySettingsAndBuildRadioFrames(SettingsScreenLike settings,
                                                           long currentFreq,
                                                           long currentBw,

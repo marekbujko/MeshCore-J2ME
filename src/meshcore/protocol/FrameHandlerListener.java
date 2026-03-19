@@ -23,6 +23,18 @@ public interface FrameHandlerListener {
     void onBatteryUpdate(String info);
     void onError(int code);
 
+    /**
+     * Trace path / ping result.
+     * PUSH_TRACE_DATA frame payload (after push code):
+     *  [1]    reserved
+     *  [2]    path_len
+     *  [3]    flags
+     *  [4..7]  tag (uint32 LE)
+     *  [8..11] auth_code (uint32 LE)
+     *  [12..] path_hashes[path_len], path_snrs[path_len], final_snr (int8)
+     */
+    void onTraceData(int flags, long tag, long authCode, byte[] pathHashes, byte[] pathSnrs, int finalSNR4);
+
     boolean isContactsScreenCurrent();
     void showContactsScreen();
 

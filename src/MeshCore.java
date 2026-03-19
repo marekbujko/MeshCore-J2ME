@@ -43,6 +43,11 @@ import meshcore.ui.MessageSettingsScreen;
 import meshcore.ui.Alerts;
 import meshcore.ui.NotificationPresenter;
 import meshcore.ui.SettingsPresenter;
+import meshcore.ui.PingZeroHopScreen;
+import meshcore.ui.TracePathResultScreen;
+import meshcore.ui.TracePathSelectScreen;
+import meshcore.util.ZeroHopPingService;
+import meshcore.util.TracePathPingService;
 
 /**
  * MeshCore WiFi TCP Client for Nokia Asha 210 (J2ME MIDP 2.0 / CLDC 1.1)
@@ -125,6 +130,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     private ConnectionManager connectionManager;
     private DmSendManager dmSendManager;
+    private ZeroHopPingService zeroHopPingService;
+    private TracePathPingService tracePathPingService;
 
     // -----------------------------------------------------------------------
     // MIDlet lifecycle
@@ -132,6 +139,32 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void startApp() {
         display = Display.getDisplay(this);
         dmSendManager = new DmSendManager(this, AppConstants.DM_SEND_MAX_ATTEMPTS, AppConstants.DM_SEND_TIMEOUT_MS);
+        zeroHopPingService = new ZeroHopPingService(new ZeroHopPingService.Listener() {
+            public void onZeroHopPingResult(
+                    final int contactIdx,
+                    final String contactName,
+                    final int pathHops,
+                    final String snrForward,
+                    final String snrBack,
+                    final long durationMs,
+                    final Displayable returnTo
+            ) {
+                display.callSerially(new Runnable() {
+                    public void run() {
+                        Displayable cur = display.getCurrent();
+                        if (cur instanceof PingZeroHopScreen) {
+                            ((PingZeroHopScreen) cur).showResult(
+                                    contactName,
+                                    snrForward,
+                                    snrBack,
+                                    pathHops,
+                                    durationMs
+                            );
+                        }
+                    }
+                });
+            }
+        });
         frameHandler = new FrameHandler(this, contactStore.getNames(), contactStore.getKeys(), contactStore.getTypes(), contactStore.getPathHops(), contactStore.getPathBytes(), contactStore.getContactFlags(), contactStore.getLastAdvert());
         connectionManager = new ConnectionManager(new ConnectionManager.Listener() {
             public void onFrame(byte[] frame) {
@@ -822,6 +855,110 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         }
     }
 
+    public void pingRepeaterZeroHop(int contactIdx) {
+        if (transport == null || zeroHopPingService == null) return;
+        if (contactIdx < 0 || contactIdx >= contactStore.size()) return;
+
+        try {
+            byte destPrefix = getRepeaterPathByte(contactIdx);
+            String contactName = contactStore.getName(contactIdx);
+            Displayable returnTo = (display != null) ? display.getCurrent() : null;
+            display.setCurrent(new PingZeroHopScreen(this, returnTo));
+            zeroHopPingService.sendPing(transport, contactIdx, contactName, destPrefix, returnTo);
+            appendActivityLog("[*] Zero-hop ping sent to " + contactName);
+        } catch (IOException e) {
+            appendActivityLog("[!] Ping failed");
+        }
+    }
+
+    public void tracePathManual(byte[] forwardPath, Displayable returnTo) {
+        if (transport == null) return;
+        if (forwardPath == null || forwardPath.length == 0) return;
+
+        final TracePathResultScreen resultScreen = new TracePathResultScreen(this, returnTo, forwardPath);
+        display.setCurrent(resultScreen);
+        startTracePathService(resultScreen, forwardPath, returnTo);
+    }
+
+    public void tracePathManualRefresh(byte[] forwardPath, TracePathResultScreen resultScreen) {
+        if (transport == null) return;
+        if (forwardPath == null || forwardPath.length == 0) return;
+        if (resultScreen == null) return;
+
+        display.setCurrent(resultScreen);
+        resultScreen.renderWaiting();
+        // Only forward trace is shown, so do not run a separate back stage here.
+        startTracePathService(resultScreen, forwardPath, resultScreen.getReturnTo());
+    }
+
+    private void startTracePathService(
+            final TracePathResultScreen resultScreen,
+            byte[] forwardPath,
+            Displayable returnTo
+    ) {
+        tracePathPingService = new TracePathPingService(new TracePathPingService.Listener() {
+            public void onStageResult(
+                    final byte[] pathBytes,
+                    final byte[] pathSnrs,
+                    final int finalSNR4,
+                    final long durationMs,
+                    final Displayable rt
+            ) {
+                display.callSerially(new Runnable() {
+                    public void run() {
+                        if (display.getCurrent() != resultScreen) return;
+                        String destName = formatDestinationName(pathBytes);
+                        int hops = pathBytes != null ? pathBytes.length : 0;
+
+                        resultScreen.setResult(
+                                destName,
+                                pathSnrs,
+                                finalSNR4,
+                                hops,
+                                durationMs
+                        );
+                    }
+                });
+            }
+        });
+
+        try {
+            tracePathPingService.start(transport, forwardPath, returnTo);
+        } catch (IOException e) {
+            appendActivityLog("[!] Trace path failed");
+        }
+    }
+
+    private String formatDestinationName(byte[] pathBytes) {
+        if (pathBytes == null || pathBytes.length == 0) return "";
+        byte dest = pathBytes[pathBytes.length - 1];
+        String name = getRepeaterNameForPathByte(dest);
+        if (name != null && name.length() > 0) return name;
+        // Fallback: show hex prefix.
+        return "0x" + FrameUtils.bytesToHex(new byte[]{dest}, 0, 1);
+    }
+
+    private String formatSnr4ToDb(int snr4) {
+        boolean neg = snr4 < 0;
+        int abs = neg ? -snr4 : snr4;
+        int whole = abs / 4;
+        int fracQ = abs % 4; // 0..3
+        int fracDec = fracQ * 25; // 0,25,50,75
+        String fracStr = fracDec < 10 ? "0" + fracDec : String.valueOf(fracDec);
+        return (neg ? "-" : "") + whole + "." + fracStr + " dB";
+    }
+
+    private String formatSnrList(byte[] pathSnrs) {
+        if (pathSnrs == null || pathSnrs.length == 0) return "n/a";
+        StringBuffer sb = new StringBuffer();
+        for (int i = 0; i < pathSnrs.length; i++) {
+            if (i > 0) sb.append(", ");
+            int snr4 = (int) pathSnrs[i];
+            sb.append(i + 1).append(": ").append(formatSnr4ToDb(snr4));
+        }
+        return sb.toString();
+    }
+
     /** Send one flood advert so the network can re-learn paths (e.g. after path reset or path edit). */
     private void sendAdvertFloodForPathDiscovery() {
         try {
@@ -1471,6 +1608,20 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void onError(int code) {
         String msg = TextUtils.getErrorCodeMessage(code);
         appendActivityLog("[!] Error " + code + (msg != null ? " (" + msg + ")" : ""));
+    }
+
+    public void onTraceData(final int flags,
+                             final long tag,
+                             final long authCode,
+                             final byte[] pathHashes,
+                             final byte[] pathSnrs,
+                             final int finalSNR4) {
+        if (zeroHopPingService != null) {
+            zeroHopPingService.handleTraceData(flags, tag, authCode, pathHashes, pathSnrs, finalSNR4);
+        }
+        if (tracePathPingService != null) {
+            tracePathPingService.handleTraceData(flags, tag, authCode, pathHashes, pathSnrs, finalSNR4);
+        }
     }
 
     public boolean isContactsScreenCurrent() {
