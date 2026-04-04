@@ -35,9 +35,12 @@ public final class ContactActionsScreen extends List implements CommandListener 
     private final Image iconResetPath;
     private final Image iconRemoveContact;
     private final Image iconPingZeroHop;
+    private final Image iconTelemetry;
+    private final Image iconRepeaterLogin;
 
-    private static final int IDX_FAVORITE_CONTACTS = 2;
-    private static final int IDX_FAVORITE_REPEATERS = 1;
+    private static final int IDX_FAVORITE_CONTACTS = 3;
+    /** Favorite row index in repeater list (after Login). */
+    private static final int IDX_FAVORITE_REPEATERS = 3;
 
     public ContactActionsScreen(AppController app, int contactIdx, String name, int type, Displayable returnTo) {
         super("Contact", List.IMPLICIT);
@@ -60,27 +63,32 @@ public final class ContactActionsScreen extends List implements CommandListener 
         iconResetPath = loadIcon("/reset-path.png");
         iconRemoveContact = loadIcon("/contact-remove.png");
         iconPingZeroHop = loadIcon("/ping-zero-hop.png");
+        iconTelemetry = loadIcon("/telemetry.png");
+        iconRepeaterLogin = loadIcon("/repeater-login.png");
 
         Image favIcon = app.isFavorite(contactIdx) ? iconFavoriteSelected : iconFavoriteUnselected;
 
         if (!isRepeater) {
-            // Contacts: Write, Details, Favorite, Share, Set/Reset/Remove
+            // Contacts: Write, Details, View Telemetry, Favorite, Share, Set/Reset/Remove
             append("Write Message", iconWriteMessage);     // 0
             append("Details", iconDetails);                // 1
-            append(app.isFavorite(contactIdx) ? "Remove from Favorites" : "Add to Favorites", favIcon);  // 2
-            append("Share", iconShare);                    // 3
-            append("Set Path", iconSetPath);               // 4
-            append("Reset Path", iconResetPath);           // 5
-            append("Remove Contact", iconRemoveContact);   // 6
+            append("View Telemetry", iconTelemetry);       // 2
+            append(app.isFavorite(contactIdx) ? "Remove from Favorites" : "Add to Favorites", favIcon);  // 3
+            append("Share", iconShare);                    // 4
+            append("Set Path", iconSetPath);               // 5
+            append("Reset Path", iconResetPath);           // 6
+            append("Remove Contact", iconRemoveContact);   // 7
         } else {
-            // Repeaters: Details, Favorite, Share, Ping, Set/Reset/Remove
+            // Repeaters: Details, Telemetry, Repeater Login, Favorite, Share, Ping, Set/Reset/Remove
             append("Details", iconDetails);                // 0
-            append(app.isFavorite(contactIdx) ? "Remove from Favorites" : "Add to Favorites", favIcon);  // 1
-            append("Share", iconShare);                    // 2
-            append("Ping (Zero Hop)", iconPingZeroHop);    // 3
-            append("Set Path", iconSetPath);               // 4
-            append("Reset Path", iconResetPath);           // 5
-            append("Remove Contact", iconRemoveContact);   // 6
+            append("View Telemetry", iconTelemetry);       // 1
+            append("Repeater Login", iconRepeaterLogin);                 // 2
+            append(app.isFavorite(contactIdx) ? "Remove from Favorites" : "Add to Favorites", favIcon);  // 3
+            append("Share", iconShare);                    // 4
+            append("Ping (Zero Hop)", iconPingZeroHop);    // 5
+            append("Set Path", iconSetPath);               // 6
+            append("Reset Path", iconResetPath);           // 7
+            append("Remove Contact", iconRemoveContact);   // 8
         }
 
         cmdBack = new Command("Back", Command.BACK, 1);
@@ -111,22 +119,25 @@ public final class ContactActionsScreen extends List implements CommandListener 
                 switch (sel) {
                     case 0: openWriteMessage(); break;
                     case 1: showDetails(); break;
-                    case 2: showFavoriteInfo(); break;
-                    case 3: showShareInfo(); break;
-                    case 4: openSetPath(); break;
-                    case 5: openResetPathConfirm(); break;
-                    case 6: openRemoveConfirm(); break;
+                    case 2: openViewTelemetry(); break;
+                    case 3: showFavoriteInfo(); break;
+                    case 4: showShareInfo(); break;
+                    case 5: openSetPath(); break;
+                    case 6: openResetPathConfirm(); break;
+                    case 7: openRemoveConfirm(); break;
                 }
             } else {
                 // Repeaters layout
                 switch (sel) {
                     case 0: showDetails(); break;
-                    case 1: showFavoriteInfo(); break;
-                    case 2: showShareInfo(); break;
-                    case 3: openPingInfo(); break;
-                    case 4: openSetPath(); break;
-                    case 5: openResetPathConfirm(); break;
-                    case 6: openRemoveConfirm(); break;
+                    case 1: openViewTelemetry(); break;
+                    case 2: openRepeaterLogin(); break;
+                    case 3: showFavoriteInfo(); break;
+                    case 4: showShareInfo(); break;
+                    case 5: openPingInfo(); break;
+                    case 6: openSetPath(); break;
+                    case 7: openResetPathConfirm(); break;
+                    case 8: openRemoveConfirm(); break;
                 }
             }
         }
@@ -226,6 +237,18 @@ public final class ContactActionsScreen extends List implements CommandListener 
 
     private void openPingInfo() {
         app.pingRepeaterZeroHop(contactIdx);
+    }
+
+    private void openViewTelemetry() {
+        if (isRepeater) {
+            app.requestRepeaterTelemetryOrLogin(contactIdx, this);
+        } else {
+            app.requestContactTelemetry(contactIdx, this);
+        }
+    }
+
+    private void openRepeaterLogin() {
+        app.openRepeaterLoginEntry(contactIdx, this);
     }
 }
 

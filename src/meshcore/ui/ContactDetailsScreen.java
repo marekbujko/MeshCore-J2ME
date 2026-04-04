@@ -38,6 +38,11 @@ public final class ContactDetailsScreen extends Canvas implements CommandListene
 
     private Font titleFont;
     private Font bodyFont;
+    private Font smallFont;
+    private Font sectionHeaderFont;
+
+    /** Set each paint; used for pointer hit-testing below the fixed header. */
+    private int headerBarHeight = 44;
 
     public ContactDetailsScreen(AppController app, int contactIdx, String name, int type, Displayable returnTo) {
         this.app = app;
@@ -105,7 +110,7 @@ public final class ContactDetailsScreen extends Canvas implements CommandListene
         if (pathBytes == null || pathBytes.length == 0) return "(Direct)";
         StringBuffer sb = new StringBuffer();
         for (int i = 0; i < pathBytes.length; i++) {
-            if (i > 0) sb.append(" -> ");
+            if (i > 0) sb.append(" >> ");
             String rep = app.getRepeaterNameForPathByte(pathBytes[i]);
             if (rep != null && rep.length() > 0) {
                 sb.append(rep);
@@ -193,92 +198,157 @@ public final class ContactDetailsScreen extends Canvas implements CommandListene
         return (neg ? "-" : "") + whole + "." + fracStr;
     }
 
-    protected void paint(Graphics g) {
-        int w = getWidth();
-        int h = getHeight();
+    private void ensureDetailFonts() {
         if (titleFont == null) {
             titleFont = Font.getFont(Font.FACE_PROPORTIONAL, Font.STYLE_BOLD, Font.SIZE_MEDIUM);
             bodyFont = Font.getFont(Font.FACE_PROPORTIONAL, Font.STYLE_PLAIN, Font.SIZE_SMALL);
+            smallFont = Font.getFont(Font.FACE_PROPORTIONAL, Font.STYLE_PLAIN, Font.SIZE_SMALL);
+            sectionHeaderFont = Font.getFont(Font.FACE_PROPORTIONAL, Font.STYLE_BOLD, Font.SIZE_SMALL);
+        }
+    }
+
+    private static void drawSectionDivider(Graphics g, int x, int y, int maxW) {
+        g.setColor(UiTheme.CARD_BORDER);
+        g.drawLine(x + 4, y, x + maxW - 4, y);
+    }
+
+    protected void paint(Graphics g) {
+        int w = getWidth();
+        int h = getHeight();
+        ensureDetailFonts();
+
+        int headerBarH = UiScreenHeader.measureHeight(w, "Details", null, titleFont, smallFont);
+        int viewportH = h - headerBarH;
+        if (viewportH < 1) {
+            viewportH = 1;
         }
 
-        g.setColor(UiTheme.BG_WHITE);
-        g.fillRect(0, 0, w, h);
-
-        int pad = 8;
+        int pad = 10;
         int x = pad;
         int maxW = w - (pad * 2) - 6;
         int scrollY = scrollCtrl.getScrollY();
-        int y = -scrollY;
 
-        g.setFont(titleFont);
+        g.setColor(UiTheme.PANEL_BG);
+        g.fillRect(0, 0, w, h);
+
+        g.clipRect(0, headerBarH, w, viewportH);
+        int y = headerBarH - scrollY + 10;
+
+        g.setFont(sectionHeaderFont);
+        g.setColor(UiTheme.BAR_BG);
+        g.fillRect(x, y, 4, sectionHeaderFont.getHeight() + 2);
         g.setColor(UiTheme.TEXT_DARK);
-        y += UiCanvasUtil.drawWrappedCentered(g, "Details", x, y, maxW);
-        y += 4;
-        g.setColor(UiTheme.LINE_GRAY);
-        g.drawLine(x, y, x + maxW, y);
+        y += UiCanvasUtil.drawWrapped(g, "Identity", x + 10, y, maxW - 10);
         y += 6;
+        g.setFont(bodyFont);
+        g.setColor(0x555555);
+        y += UiCanvasUtil.drawWrapped(g, "Name", x + 10, y, maxW - 10);
+        y += 2;
+        g.setColor(UiTheme.TEXT_DARK);
+        y += UiCanvasUtil.drawWrapped(g, safe(name), x + 10, y, maxW - 10);
+        y += 8;
+        g.setColor(0x555555);
+        y += UiCanvasUtil.drawWrapped(g, "Public key", x + 10, y, maxW - 10);
+        y += 2;
+        g.setColor(UiTheme.TEXT_GRAY);
+        y += UiCanvasUtil.drawWrapped(g, publicKeyHex, x + 10, y, maxW - 10);
+        y += 14;
+        drawSectionDivider(g, x, y, maxW);
+        y += 12;
 
+        g.setFont(sectionHeaderFont);
+        g.setColor(UiTheme.BAR_BG);
+        g.fillRect(x, y, 4, sectionHeaderFont.getHeight() + 2);
+        g.setColor(UiTheme.TEXT_DARK);
+        y += UiCanvasUtil.drawWrapped(g, "Location", x + 10, y, maxW - 10);
+        y += 6;
         g.setFont(bodyFont);
         g.setColor(UiTheme.TEXT_GRAY);
+        y += UiCanvasUtil.drawWrapped(g, "GPS  " + gpsText, x + 10, y, maxW - 10);
+        y += 6;
+        y += UiCanvasUtil.drawWrapped(g, "Distance  " + distanceText, x + 10, y, maxW - 10);
+        y += 6;
+        y += UiCanvasUtil.drawWrapped(g, "Type  " + getTypeLabel(type), x + 10, y, maxW - 10);
+        y += 14;
+        drawSectionDivider(g, x, y, maxW);
+        y += 12;
 
-        y += UiCanvasUtil.drawWrapped(g, "Name: " + safe(name), x, y, maxW);
-        y += 4;
-        y += UiCanvasUtil.drawWrapped(g, "Public Key (32 hex):", x, y, maxW);
-        y += UiCanvasUtil.drawWrapped(g, publicKeyHex, x, y, maxW);
-        y += 4;
-        y += UiCanvasUtil.drawWrapped(g, "Position (GPS): " + gpsText, x, y, maxW);
-        y += 4;
-        y += UiCanvasUtil.drawWrapped(g, "Distance Away: " + distanceText, x, y, maxW);
-        y += 4;
-        y += UiCanvasUtil.drawWrapped(g, "Type: " + getTypeLabel(type), x, y, maxW);
+        g.setFont(sectionHeaderFont);
+        g.setColor(UiTheme.BAR_BG);
+        g.fillRect(x, y, 4, sectionHeaderFont.getHeight() + 2);
+        g.setColor(UiTheme.TEXT_DARK);
+        y += UiCanvasUtil.drawWrapped(g, "Radio", x + 10, y, maxW - 10);
         y += 6;
-        g.setColor(UiTheme.LINE_GRAY);
-        g.drawLine(x, y, x + maxW, y);
-        y += 6;
+        g.setFont(bodyFont);
         g.setColor(UiTheme.TEXT_GRAY);
-        y += UiCanvasUtil.drawWrapped(g, "Last Advert Heard: " + lastAdvertText, x, y, maxW);
+        y += UiCanvasUtil.drawWrapped(g, "Last advert  " + lastAdvertText, x + 10, y, maxW - 10);
+        y += 8;
+        y += UiCanvasUtil.drawWrapped(g, "Hops  " + hopsText, x + 10, y, maxW - 10);
+        y += 8;
+        y += UiCanvasUtil.drawWrapped(g, "Path (hex)  " + outPathText, x + 10, y, maxW - 10);
         y += 6;
-        g.setColor(UiTheme.LINE_GRAY);
-        g.drawLine(x, y, x + maxW, y);
-        y += 6;
-        g.setColor(UiTheme.TEXT_GRAY);
-        y += UiCanvasUtil.drawWrapped(g, "Hops Away: " + hopsText, x, y, maxW);
-        y += 4;
-        y += UiCanvasUtil.drawWrapped(g, "Out Path: " + outPathText, x, y, maxW);
-        y += 4;
-        y += UiCanvasUtil.drawWrapped(g, "" + outPathRepeatersText, x, y, maxW);
+        y += UiCanvasUtil.drawWrapped(g, outPathRepeatersText, x + 10, y, maxW - 10);
 
-        int contentHeight = y + scrollY + pad;
+        y += 16;
+
+        int contentHeight = y - headerBarH + scrollY + pad;
+        if (contentHeight < viewportH) {
+            contentHeight = viewportH;
+        }
         scrollCtrl.setContentHeight(contentHeight);
-        scrollCtrl.clamp(h);
+        scrollCtrl.clamp(viewportH);
 
-        int maxScroll = scrollCtrl.getMaxScroll(h);
+        g.setClip(0, 0, w, h);
+        headerBarHeight = UiScreenHeader.paint(g, w, "Details", null, titleFont, smallFont);
+
+        int maxScroll = scrollCtrl.getMaxScroll(viewportH);
         if (maxScroll > 0) {
             int barX = w - 4;
-            int barTop = 4;
-            int barH = h - 8;
+            int barTop = headerBarH + 2;
+            int barLen = h - barTop - 4;
             g.setColor(UiTheme.SCROLL_BAR_BG);
-            g.drawLine(barX, barTop, barX, barTop + barH);
-            int thumbH = Math.max(10, (barH * h) / contentHeight);
+            g.drawLine(barX, barTop, barX, barTop + barLen);
+            int thumbH = Math.max(10, (barLen * viewportH) / Math.max(contentHeight, 1));
             int scrollYClamped = scrollCtrl.getScrollY();
-            int thumbY = barTop + ((barH - thumbH) * scrollYClamped) / maxScroll;
+            int thumbY = barTop + ((barLen - thumbH) * scrollYClamped) / maxScroll;
             g.setColor(UiTheme.SCROLL_BAR_THUMB);
             g.fillRect(barX - 1, thumbY, 3, thumbH);
         }
     }
 
     protected void keyPressed(int keyCode) {
+        ensureDetailFonts();
+        int w = getWidth();
+        int hh = UiScreenHeader.measureHeight(w, "Details", null, titleFont, smallFont);
+        int vh = getHeight() - hh;
+        if (vh < 1) {
+            vh = 1;
+        }
         int action = getGameAction(keyCode);
         int step = UiScrollController.computeStep(bodyFont);
-        if (scrollCtrl.onKey(action, step, getHeight())) repaint();
+        if (scrollCtrl.onKey(action, step, vh)) {
+            repaint();
+        }
     }
 
     protected void pointerPressed(int x, int y) {
+        if (y < headerBarHeight) {
+            return;
+        }
         scrollCtrl.pointerPressed(y);
     }
 
     protected void pointerDragged(int x, int y) {
-        if (scrollCtrl.onDrag(y, getHeight())) repaint();
+        ensureDetailFonts();
+        int w = getWidth();
+        int hh = UiScreenHeader.measureHeight(w, "Details", null, titleFont, smallFont);
+        int vh = getHeight() - hh;
+        if (vh < 1) {
+            vh = 1;
+        }
+        if (scrollCtrl.onDrag(y, vh)) {
+            repaint();
+        }
     }
 
     protected void pointerReleased(int x, int y) {

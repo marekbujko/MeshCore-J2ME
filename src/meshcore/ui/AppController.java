@@ -47,6 +47,26 @@ public interface AppController {
     void updateContactPath(int contactIdx, byte[] newPath);
     /** Trace path ping for repeater: sends TRACE packet using zero-hop/direct sending. */
     void pingRepeaterZeroHop(int contactIdx);
+    /** Request telemetry from contact/repeater; shows result screen. */
+    void requestContactTelemetry(int contactIdx, Displayable returnTo);
+    /**
+     * Repeaters: require login session; if none, open login then run telemetry after success.
+     * Non-repeaters: same as {@link #requestContactTelemetry}.
+     */
+    void requestRepeaterTelemetryOrLogin(int contactIdx, Displayable returnTo);
+    /** Resend telemetry request while staying on the result screen (after Refresh). */
+    void refreshContactTelemetry(int contactIdx, TelemetryResultScreen screen);
+    /** Clear intent to open telemetry after login (e.g. user backed out of login). */
+    void clearPendingTelemetryAfterLogin();
+    /** Drop pending telemetry correlation (e.g. when leaving result screen). */
+    void clearTelemetryPending();
+    /** Send repeater login (password empty allowed for guest); shows result screen. */
+    void requestRepeaterLogin(int contactIdx, String password, Displayable returnTo);
+    void clearLoginPending();
+    /** Repeater login: show saved session summary if logged in, else password screen. */
+    void openRepeaterLoginEntry(int contactIdx, Displayable returnTo);
+    /** Clear persisted repeater login session (log out). */
+    void clearRepeaterLoginSession(int contactIdx);
     /** Manual trace path: send forward path, then show results. */
     void tracePathManual(byte[] forwardPath, Displayable returnTo);
     /** Re-run the same forward trace path and update the given result screen. */

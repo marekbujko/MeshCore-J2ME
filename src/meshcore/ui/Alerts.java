@@ -2,6 +2,8 @@ package meshcore.ui;
 
 import javax.microedition.lcdui.Alert;
 import javax.microedition.lcdui.AlertType;
+import javax.microedition.lcdui.Command;
+import javax.microedition.lcdui.CommandListener;
 import javax.microedition.lcdui.Display;
 import javax.microedition.lcdui.Displayable;
 
@@ -50,6 +52,34 @@ public final class Alerts {
         Alert a = new Alert(safeTitle, safeText, null, AlertType.CONFIRMATION);
         a.setTimeout(Alert.FOREVER);
         return a;
+    }
+
+    /**
+     * Modal info alert: user must press OK to dismiss; then {@code next} is shown.
+     * Unlike {@link #info}, this does not auto-close.
+     */
+    public static void ok(Display display, Displayable next, String title, String text) {
+        if (display == null || next == null) {
+            return;
+        }
+        String safeTitle = (title != null && title.length() > 0) ? title : "Message";
+        String safeText = (text != null) ? text : "";
+        final Display disp = display;
+        final Displayable whenDone = next;
+        final Alert a = new Alert(safeTitle, safeText, null, AlertType.INFO);
+        a.setTimeout(Alert.FOREVER);
+        Command cmdOk = new Command("OK", Command.OK, 1);
+        a.addCommand(cmdOk);
+        a.setCommandListener(new CommandListener() {
+            public void commandAction(Command c, Displayable d) {
+                disp.setCurrent(whenDone);
+            }
+        });
+        try {
+            disp.setCurrent(a, whenDone);
+        } catch (IllegalArgumentException e) {
+            disp.setCurrent(a);
+        }
     }
 }
 

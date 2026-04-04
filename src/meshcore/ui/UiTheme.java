@@ -19,6 +19,16 @@ public final class UiTheme {
     public static final int TEXT_GRAY = 0x333333;
     public static final int LINE_GRAY = 0xD0D0D0;
 
+    /** Primary action / header bar (matches pill buttons). */
+    public static final int BAR_BG = 0x212121;
+    public static final int BAR_TEXT = 0xFFFFFF;
+    public static final int BAR_MUTED = 0xB8B8B8;
+
+    /** Content area behind cards. */
+    public static final int PANEL_BG = 0xEEEEEE;
+    public static final int CARD_FILL = 0xFFFFFF;
+    public static final int CARD_BORDER = 0xD8D8D8;
+
     public static final int SNR_TEXT = 0x444444;
     public static final int ARROW = 0x7F878E;
 

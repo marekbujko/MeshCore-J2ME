@@ -44,10 +44,17 @@ import meshcore.ui.Alerts;
 import meshcore.ui.NotificationPresenter;
 import meshcore.ui.SettingsPresenter;
 import meshcore.ui.PingZeroHopScreen;
+import meshcore.ui.TelemetryResultScreen;
+import meshcore.ui.RepeaterLoggedInScreen;
+import meshcore.ui.RepeaterLoginScreen;
 import meshcore.ui.TracePathResultScreen;
 import meshcore.ui.TracePathSelectScreen;
 import meshcore.util.ZeroHopPingService;
 import meshcore.util.TracePathPingService;
+import meshcore.util.TelemetryRequestService;
+import meshcore.util.LoginRequestService;
+import meshcore.util.RepeaterLoginSessionStore;
+import meshcore.util.RepeaterPasswordStore;
 
 /**
  * MeshCore WiFi TCP Client for Nokia Asha 210 (J2ME MIDP 2.0 / CLDC 1.1)
@@ -134,6 +141,10 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private DmSendManager dmSendManager;
     private ZeroHopPingService zeroHopPingService;
     private TracePathPingService tracePathPingService;
+    private TelemetryRequestService telemetryRequestService;
+    private LoginRequestService loginRequestService;
+    /** If >= 0, next successful repeater login should open telemetry for this contact index. */
+    private volatile int pendingTelemetryAfterLoginContactIdx = -1;
 
     // -----------------------------------------------------------------------
     // MIDlet lifecycle
@@ -163,6 +174,82 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                                     durationMs
                             );
                         }
+                    }
+                });
+            }
+        });
+        telemetryRequestService = new TelemetryRequestService(new TelemetryRequestService.Listener() {
+            public void onTelemetryResult(
+                    final String contactName,
+                    final String ch1Decoded,
+                    final String rawHex,
+                    final long durationMs,
+                    final Displayable returnTo
+            ) {
+                display.callSerially(new Runnable() {
+                    public void run() {
+                        Displayable cur = display.getCurrent();
+                        if (cur instanceof TelemetryResultScreen) {
+                            ((TelemetryResultScreen) cur).showResult(contactName, ch1Decoded, rawHex, durationMs);
+                        }
+                    }
+                });
+            }
+        });
+        loginRequestService = new LoginRequestService(new LoginRequestService.Listener() {
+            public void onLoginResult(
+                    final boolean success,
+                    final int contactIdx,
+                    final String contactName,
+                    final boolean isAdmin,
+                    final int permissionsByte,
+                    final long serverTag,
+                    final int newPerm,
+                    final long durationMs,
+                    final Displayable returnTo) {
+                display.callSerially(new Runnable() {
+                    public void run() {
+                        Displayable cur = display.getCurrent();
+                        if (cur instanceof RepeaterLoginScreen) {
+                            ((RepeaterLoginScreen) cur).setAwaitingLoginReply(false);
+                        }
+                        if (success) {
+                            String hex = getContactPublicKeyHex(contactIdx);
+                            if (hex != null && hex.length() > 0) {
+                                RepeaterLoginSessionStore.save(hex, permissionsByte, serverTag, newPerm);
+                            }
+                            int pendingTelem = pendingTelemetryAfterLoginContactIdx;
+                            if (pendingTelem == contactIdx) {
+                                pendingTelemetryAfterLoginContactIdx = -1;
+                                requestContactTelemetry(contactIdx, returnTo);
+                                return;
+                            }
+                            String text;
+                            if (durationMs >= 0) {
+                                text = "Round-trip Duration: " + durationMs + " ms";
+                            } else {
+                                text = "Round-trip Duration: n/a";
+                            }
+                            String rawName = contactStore.getName(contactIdx);
+                            String title = TextUtils.sanitizeLabel(rawName, 32);
+                            if (title.length() == 0) {
+                                title = "Repeater";
+                            }
+                            RepeaterLoggedInScreen loggedIn =
+                                    new RepeaterLoggedInScreen(MeshCore.this, contactIdx, title, returnTo);
+                            Alerts.ok(display, loggedIn, "Logged in", text);
+                            return;
+                        }
+                        pendingTelemetryAfterLoginContactIdx = -1;
+                        Displayable next = (cur instanceof RepeaterLoginScreen) ? cur : returnTo;
+                        StringBuffer msg = new StringBuffer(
+                                "Login failed. Wrong password or access denied.");
+                        if (durationMs >= 0) {
+                            msg.append("\n\nRound-trip Duration: ");
+                            msg.append(durationMs);
+                            msg.append(" ms");
+                        }
+                        Alerts.ok(display, next, "Login failed", msg.toString());
                     }
                 });
             }
@@ -889,6 +976,163 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             appendActivityLog("[*] Zero-hop ping sent to " + contactName);
         } catch (IOException e) {
             appendActivityLog("[!] Ping failed");
+        }
+    }
+
+    public void requestContactTelemetry(int contactIdx, Displayable returnTo) {
+        if (transport == null || telemetryRequestService == null) return;
+        if (contactIdx < 0 || contactIdx >= contactStore.size()) return;
+        byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
+        if (key == null || key.length != 32) {
+            appendActivityLog("[!] Telemetry: invalid contact key");
+            return;
+        }
+        String contactName = contactStore.getName(contactIdx);
+        final TelemetryResultScreen screen = new TelemetryResultScreen(this, contactIdx, contactName, returnTo);
+        display.setCurrent(screen);
+        try {
+            telemetryRequestService.sendRequest(transport, contactIdx, contactName, key, returnTo);
+            appendActivityLog("[*] Telemetry request sent to " + contactName);
+        } catch (IOException e) {
+            appendActivityLog("[!] Telemetry request failed");
+            display.callSerially(new Runnable() {
+                public void run() {
+                    if (display.getCurrent() == screen) {
+                        screen.showSendFailed("Could not send telemetry request.");
+                    }
+                }
+            });
+        }
+    }
+
+    public void requestRepeaterTelemetryOrLogin(int contactIdx, Displayable returnTo) {
+        if (contactIdx < 0 || contactIdx >= contactStore.size()) {
+            return;
+        }
+        int type = contactStore.getType(contactIdx);
+        if (type != ProtocolConstants.ADV_TYPE_REPEATER) {
+            requestContactTelemetry(contactIdx, returnTo);
+            return;
+        }
+        String hex = getContactPublicKeyHex(contactIdx);
+        if (hex != null && RepeaterLoginSessionStore.load(hex) != null) {
+            requestContactTelemetry(contactIdx, returnTo);
+            return;
+        }
+        pendingTelemetryAfterLoginContactIdx = contactIdx;
+        String rawName = contactStore.getName(contactIdx);
+        String title = TextUtils.sanitizeLabel(rawName, 32);
+        if (title.length() == 0) {
+            title = "Repeater";
+        }
+        display.setCurrent(new RepeaterLoginScreen(this, contactIdx, title, returnTo));
+    }
+
+    public void refreshContactTelemetry(int contactIdx, TelemetryResultScreen screen) {
+        if (transport == null || telemetryRequestService == null) return;
+        if (screen == null) return;
+        if (contactIdx < 0 || contactIdx >= contactStore.size()) return;
+        final TelemetryResultScreen telemetryScreen = screen;
+        byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
+        if (key == null || key.length != 32) {
+            return;
+        }
+        String contactName = contactStore.getName(contactIdx);
+        final Displayable rt = telemetryScreen.getTelemetryReturnTo();
+        try {
+            telemetryRequestService.sendRequest(transport, contactIdx, contactName, key, rt);
+            appendActivityLog("[*] Telemetry refresh sent to " + contactName);
+        } catch (IOException e) {
+            appendActivityLog("[!] Telemetry refresh failed");
+            display.callSerially(new Runnable() {
+                public void run() {
+                    if (display.getCurrent() == telemetryScreen) {
+                        telemetryScreen.showSendFailed("Could not send telemetry request.");
+                    }
+                }
+            });
+        }
+    }
+
+    public void clearPendingTelemetryAfterLogin() {
+        pendingTelemetryAfterLoginContactIdx = -1;
+    }
+
+    public void clearTelemetryPending() {
+        if (telemetryRequestService != null) {
+            telemetryRequestService.clearPending();
+        }
+    }
+
+    public void requestRepeaterLogin(int contactIdx, String password, Displayable returnTo) {
+        if (transport == null || loginRequestService == null) return;
+        if (contactIdx < 0 || contactIdx >= contactStore.size()) return;
+        byte[] key = (byte[]) contactStore.getKeys().elementAt(contactIdx);
+        if (key == null || key.length != 32) {
+            appendActivityLog("[!] Login: invalid contact key");
+            return;
+        }
+        String contactName = contactStore.getName(contactIdx);
+        String effectivePassword = (password != null) ? password : "";
+        if (effectivePassword.trim().length() == 0) {
+            effectivePassword = "";
+        }
+        final Displayable loginReturnTo = returnTo;
+        Displayable cur = display.getCurrent();
+        if (cur instanceof RepeaterLoginScreen) {
+            ((RepeaterLoginScreen) cur).setAwaitingLoginReply(true);
+        }
+        try {
+            loginRequestService.sendLogin(transport, contactIdx, contactName, key, effectivePassword, returnTo);
+            appendActivityLog("[*] Login sent to " + contactName
+                    + (effectivePassword.length() == 0 ? " (guest)" : ""));
+        } catch (IOException e) {
+            appendActivityLog("[!] Login send failed");
+            pendingTelemetryAfterLoginContactIdx = -1;
+            display.callSerially(new Runnable() {
+                public void run() {
+                    Displayable d = display.getCurrent();
+                    if (d instanceof RepeaterLoginScreen) {
+                        ((RepeaterLoginScreen) d).setAwaitingLoginReply(false);
+                    }
+                    Displayable next = (d instanceof RepeaterLoginScreen) ? d : loginReturnTo;
+                    Alerts.ok(display, next, "Login", "Could not send login.");
+                }
+            });
+        }
+    }
+
+    public void clearLoginPending() {
+        if (loginRequestService != null) {
+            loginRequestService.clearPending();
+        }
+    }
+
+    public void openRepeaterLoginEntry(int contactIdx, Displayable returnTo) {
+        if (contactIdx < 0 || contactIdx >= contactStore.size()) {
+            return;
+        }
+        String hex = getContactPublicKeyHex(contactIdx);
+        String rawName = contactStore.getName(contactIdx);
+        String title = TextUtils.sanitizeLabel(rawName, 32);
+        if (title.length() == 0) {
+            title = "Repeater";
+        }
+        if (hex != null && RepeaterLoginSessionStore.load(hex) != null) {
+            display.setCurrent(new RepeaterLoggedInScreen(this, contactIdx, title, returnTo));
+        } else {
+            display.setCurrent(new RepeaterLoginScreen(this, contactIdx, title, returnTo));
+        }
+    }
+
+    public void clearRepeaterLoginSession(int contactIdx) {
+        if (contactIdx < 0 || contactIdx >= contactStore.size()) {
+            return;
+        }
+        String hex = getContactPublicKeyHex(contactIdx);
+        if (hex != null && hex.length() > 0) {
+            RepeaterLoginSessionStore.remove(hex);
+            RepeaterPasswordStore.remove(hex);
         }
     }
 
@@ -1665,6 +1909,18 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         }
         if (tracePathPingService != null) {
             tracePathPingService.handleTraceData(flags, tag, authCode, pathHashes, pathSnrs, finalSNR4);
+        }
+    }
+
+    public void onTelemetryResponse(byte[] pubKeyPrefix6, byte[] lppPayload) {
+        if (telemetryRequestService != null) {
+            telemetryRequestService.handleTelemetryResponse(pubKeyPrefix6, lppPayload);
+        }
+    }
+
+    public void onLoginPush(boolean success, byte[] pubKeyPrefix6, int permissions, long serverTag, int newPermissions) {
+        if (loginRequestService != null) {
+            loginRequestService.handleLoginPush(success, pubKeyPrefix6, permissions, serverTag, newPermissions);
         }
     }
 

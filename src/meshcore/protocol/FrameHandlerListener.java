@@ -36,6 +36,19 @@ public interface FrameHandlerListener {
      */
     void onTraceData(int flags, long tag, long authCode, byte[] pathHashes, byte[] pathSnrs, int finalSNR4);
 
+    /**
+     * PUSH_CODE_TELEMETRY_RESPONSE: [0]=0x8B, [1]=reserved, [2..7] pubkey prefix, [8..] LPP payload.
+     */
+    void onTelemetryResponse(byte[] pubKeyPrefix6, byte[] lppPayload);
+
+    /**
+     * PUSH_LOGIN_SUCCESS (0x85) or PUSH_LOGIN_FAIL (0x86).
+     * Success: permissions at [1], prefix at [2..7]; serverTag from [8..11] when frame length is at least 12;
+     * newPermissions at [12] when length is at least 13, else -1.
+     * Fail: permissions is the reserved byte at [1]; serverTag and newPermissions are unused.
+     */
+    void onLoginPush(boolean success, byte[] pubKeyPrefix6, int permissions, long serverTag, int newPermissions);
+
     boolean isContactsScreenCurrent();
     void showContactsScreen();
 

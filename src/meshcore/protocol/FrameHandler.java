@@ -88,7 +88,43 @@ public final class FrameHandler {
             if (f.length > 1) listener.onError(f[1] & 0xFF);
         } else if (code == ProtocolConstants.PUSH_TRACE_DATA) {
             handleTraceData(f);
+        } else if (code == ProtocolConstants.PUSH_TELEMETRY_RESPONSE) {
+            handleTelemetryResponse(f);
+        } else if (code == ProtocolConstants.PUSH_LOGIN_SUCCESS) {
+            handleLoginSuccess(f);
+        } else if (code == ProtocolConstants.PUSH_LOGIN_FAIL) {
+            handleLoginFail(f);
         }
+    }
+
+    private void handleTelemetryResponse(byte[] f) {
+        if (f == null || f.length < 8) return;
+        byte[] prefix = new byte[6];
+        System.arraycopy(f, 2, prefix, 0, 6);
+        int lppLen = f.length - 8;
+        byte[] lpp = (lppLen > 0) ? new byte[lppLen] : new byte[0];
+        if (lppLen > 0) {
+            System.arraycopy(f, 8, lpp, 0, lppLen);
+        }
+        listener.onTelemetryResponse(prefix, lpp);
+    }
+
+    private void handleLoginSuccess(byte[] f) {
+        if (f == null || f.length < 8) return;
+        int permissions = f[1] & 0xFF;
+        byte[] prefix = new byte[6];
+        System.arraycopy(f, 2, prefix, 0, 6);
+        long tag = (f.length >= 12) ? FrameTransport.readUint32LE(f, 8) : 0L;
+        int newPerm = (f.length >= 13) ? (f[12] & 0xFF) : -1;
+        listener.onLoginPush(true, prefix, permissions, tag, newPerm);
+    }
+
+    private void handleLoginFail(byte[] f) {
+        if (f == null || f.length < 8) return;
+        int reserved = f[1] & 0xFF;
+        byte[] prefix = new byte[6];
+        System.arraycopy(f, 2, prefix, 0, 6);
+        listener.onLoginPush(false, prefix, reserved, 0L, -1);
     }
 
     private void handleDeviceInfo(byte[] f) {

@@ -28,6 +28,19 @@ public final class ProtocolConstants {
     public static final int CMD_GET_CHANNEL       = 31;
     public static final int CMD_SET_CHANNEL       = 32;
     public static final int CMD_SEND_TRACE_PATH  = 36;
+    /** Request telemetry from a node (destination public key, 32 bytes). */
+    public static final int CMD_SEND_TELEMETRY_REQ = 39;
+    /**
+     * Repeater/room login: [0]=26, [1..32]=destination public key (32 bytes),
+     * remainder = password UTF-8 (max ~15 bytes per protocol).
+     */
+    public static final int CMD_SEND_LOGIN = 26;
+
+    /**
+     * Cayenne LPP channel for the node's own readings (e.g. battery) in MeshCore firmware.
+     * Telemetry UI can filter to this channel only.
+     */
+    public static final int TELEM_CHANNEL_SELF = 1;
 
     /** Advert type: second byte in CMD_SEND_SELF_ADVERT frame (0 = zero-hop, 1 = flood) */
     public static final int ADVERT_ZERO_HOP = 0;
@@ -59,6 +72,12 @@ public final class ProtocolConstants {
     public static final int PUSH_ADVERT         = 0x80;
     public static final int PUSH_PATH_UPDATED   = 0x81;
     public static final int PUSH_TRACE_DATA   = 0x89;
+    /** LPP sensor payload from requested node (after 6-byte pubkey prefix). */
+    public static final int PUSH_TELEMETRY_RESPONSE = 0x8B;
+    /** Login accepted: permissions byte, 6-byte pubkey prefix, optional uint32 tag (V7+), optional new_permissions. */
+    public static final int PUSH_LOGIN_SUCCESS = 0x85;
+    /** Login rejected: reserved byte, 6-byte pubkey prefix. */
+    public static final int PUSH_LOGIN_FAIL = 0x86;
 
     // Advert types (in RESP_CONTACT) — matches meshcore://contact/add type param
     public static final int ADV_TYPE_NONE    = 0;

@@ -178,6 +178,37 @@ public final class MeshProtocolClient {
         transport.sendFrame(f);
     }
 
+    /**
+     * CMD_SEND_TELEMETRY_REQ: request telemetry from a node.
+     * Frame: [0]=39, [1..3]=0, [4..35]=destination public key (32 bytes).
+     */
+    public static void sendTelemetryRequest(FrameTransport transport, byte[] publicKey32) throws IOException {
+        if (publicKey32 == null || publicKey32.length != 32) return;
+        byte[] f = new byte[1 + 3 + 32];
+        f[0] = (byte) ProtocolConstants.CMD_SEND_TELEMETRY_REQ;
+        // f[1..3] already zero
+        System.arraycopy(publicKey32, 0, f, 4, 32);
+        transport.sendFrame(f);
+    }
+
+    /**
+     * CMD_SEND_LOGIN: public key (32) then password as UTF-8 (truncate to 15 bytes).
+     */
+    public static void sendLogin(FrameTransport transport, byte[] publicKey32, String password) throws IOException {
+        if (publicKey32 == null || publicKey32.length != 32) return;
+        byte[] pw = (password != null) ? password.getBytes("UTF-8") : new byte[0];
+        if (pw.length > 15) {
+            byte[] t = new byte[15];
+            System.arraycopy(pw, 0, t, 0, 15);
+            pw = t;
+        }
+        byte[] f = new byte[1 + 32 + pw.length];
+        f[0] = (byte) ProtocolConstants.CMD_SEND_LOGIN;
+        System.arraycopy(publicKey32, 0, f, 1, 32);
+        System.arraycopy(pw, 0, f, 33, pw.length);
+        transport.sendFrame(f);
+    }
+
     public static long[] applySettingsAndBuildRadioFrames(SettingsScreenLike settings,
                                                           long currentFreq,
                                                           long currentBw,
