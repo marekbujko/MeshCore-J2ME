@@ -6,6 +6,40 @@ public final class TextUtils {
 
     private TextUtils() {}
 
+    /**
+     * Splits combined battery response (e.g. "4100mV (4.10V)  12/3456 KB") into
+     * [0] = battery part, [1] = storage part (may be "").
+     */
+    /** Last index of two consecutive spaces strictly before {@code beforeExclusive} (Java 1.3 has no {@code lastIndexOf(String, int)}). */
+    private static int lastDoubleSpaceBefore(String info, int beforeExclusive) {
+        int limit = beforeExclusive - 2;
+        if (limit < 0) {
+            return -1;
+        }
+        for (int i = limit; i >= 0; i--) {
+            if (info.charAt(i) == ' ' && info.charAt(i + 1) == ' ') {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public static String[] splitBatteryStorage(String info) {
+        String battery = (info != null) ? info : "";
+        String storage = "";
+        if (info != null) {
+            int kb = info.indexOf(" KB");
+            if (kb > 0) {
+                int start = lastDoubleSpaceBefore(info, kb);
+                if (start >= 0) {
+                    battery = info.substring(0, start).trim();
+                    storage = info.substring(start).trim();
+                }
+            }
+        }
+        return new String[] { battery, storage };
+    }
+
     public static String formatBatteryStatus(String info) {
         if (info == null) return "";
         int p1 = info.indexOf('(');

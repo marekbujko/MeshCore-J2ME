@@ -46,6 +46,7 @@ public final class RepeaterLoginScreen extends Canvas implements CommandListener
     private Font smallFont;
 
     private final UiScrollController scrollCtrl = new UiScrollController();
+    private final UiScrollRepaintThrottler scrollDragRepaint = new UiScrollRepaintThrottler();
 
     /** Top bar height; updated each paint for pointer handling. */
     private int headerBarHeight = 44;
@@ -333,11 +334,8 @@ public final class RepeaterLoginScreen extends Canvas implements CommandListener
         g.setColor(UiTheme.BAR_BG);
         g.fillRect(x, y, 4, sectionHeaderFont.getHeight() + 2);
         g.setColor(UiTheme.TEXT_DARK);
-        y += UiCanvasUtil.drawWrapped(g, "Authentication", x + 10, y, maxW - 10);
-        y += 6;
-        g.setFont(titleFont);
         y += UiCanvasUtil.drawWrapped(g, TXT_TITLE, x + 10, y, maxW - 10);
-        y += 4;
+        y += 6;
         g.setFont(smallFont);
         g.setColor(0x666666);
         y += UiCanvasUtil.drawWrapped(g, TXT_SUB, x + 10, y, maxW - 10);
@@ -348,7 +346,7 @@ public final class RepeaterLoginScreen extends Canvas implements CommandListener
 
         g.setFont(bodyFont);
         g.setColor(0x555555);
-        y += UiCanvasUtil.drawWrapped(g, "Password", x + 10, y, maxW - 10);
+        y += UiCanvasUtil.drawWrapped(g, "Password", x + 2, y, maxW - 2);
         y += 4;
 
         int pwdFieldH = bodyFont.getHeight() + 14;
@@ -434,7 +432,7 @@ public final class RepeaterLoginScreen extends Canvas implements CommandListener
         y += 10;
         g.setFont(smallFont);
         g.setColor(0x666666);
-        y += UiCanvasUtil.drawWrapped(g, TXT_FOOTER, x + 10, y, maxW - 10);
+        y += UiCanvasUtil.drawWrappedCentered(g, TXT_FOOTER, x, y, maxW);
 
         y += 12;
         int contentHeight = y - headerBarH + scrollY + pad;
@@ -511,18 +509,25 @@ public final class RepeaterLoginScreen extends Canvas implements CommandListener
             return;
         }
         ensureFonts();
-        int hh = UiScreenHeader.measureHeight(getWidth(), "Log in", null, titleFont, smallFont);
+        int w = getWidth();
+        int hh = headerBarHeight > 0 ? headerBarHeight
+                : UiScreenHeader.measureHeight(w, "Log in", null, titleFont, smallFont);
         int vh = getHeight() - hh;
         if (vh < 1) {
             vh = 1;
         }
         if (scrollCtrl.onDrag(y, vh)) {
-            repaint();
+            scrollDragRepaint.repaintDrag(this, UiScrollRepaintThrottler.DEFAULT_DRAG_INTERVAL_MS,
+                    0, hh, w, getHeight() - hh);
         }
     }
 
     protected void pointerReleased(int x, int y) {
         scrollCtrl.pointerReleased();
+        int w = getWidth();
+        int hh = headerBarHeight > 0 ? headerBarHeight
+                : UiScreenHeader.measureHeight(w, "Log in", null, titleFont, smallFont);
+        scrollDragRepaint.flushRepaint(this, 0, hh, w, getHeight() - hh);
     }
 
     protected void keyPressed(int keyCode) {

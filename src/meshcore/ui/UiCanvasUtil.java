@@ -10,29 +10,64 @@ public final class UiCanvasUtil {
 
     private UiCanvasUtil() {}
 
+    /**
+     * Exclusive end index for one wrapped line starting at {@code i} (after leading spaces
+     * are skipped by caller). Uses {@link Font#charWidth(char)} so we avoid {@code substring}
+     * allocations in the hot loop (important on real devices).
+     */
+    private static int lineBreakCut(Font font, String text, int n, int i, int maxWidth) {
+        int end = i;
+        int lastFitSpace = -1;
+        int lineWidth = 0;
+        while (end < n) {
+            char c = text.charAt(end);
+            if (c == ' ') {
+                lastFitSpace = end;
+            }
+            int cw = font.charWidth(c);
+            if (lineWidth + cw > maxWidth) {
+                if (end > i) {
+                    break;
+                }
+            }
+            lineWidth += cw;
+            end++;
+        }
+        if (end >= n) {
+            return n;
+        }
+        if (lastFitSpace >= i) {
+            return lastFitSpace;
+        }
+        return end > i ? end : (i + 1);
+    }
+
+    private static int substringWidthChars(Font font, String text, int from, int to) {
+        int w = 0;
+        for (int j = from; j < to; j++) {
+            w += font.charWidth(text.charAt(j));
+        }
+        return w;
+    }
+
     public static int drawWrapped(Graphics g, String text, int x, int y, int maxWidth) {
-        if (text == null) text = "";
-        int lineH = g.getFont().getHeight();
+        if (text == null) {
+            text = "";
+        }
+        Font font = g.getFont();
+        int lineH = font.getHeight();
         int startY = y;
         int n = text.length();
         int i = 0;
         while (i < n) {
-            while (i < n && text.charAt(i) == ' ') i++;
-            if (i >= n) break;
-            int end = i;
-            int lastFitSpace = -1;
-            while (end < n) {
-                if (text.charAt(end) == ' ') lastFitSpace = end;
-                String s = text.substring(i, end + 1);
-                if (g.getFont().stringWidth(s) > maxWidth) break;
-                end++;
+            while (i < n && text.charAt(i) == ' ') {
+                i++;
             }
-            int cut;
-            if (end >= n) cut = n;
-            else if (lastFitSpace >= i) cut = lastFitSpace;
-            else cut = end > i ? end : (i + 1);
-            String line = text.substring(i, cut);
-            g.drawString(line, x, y, Graphics.LEFT | Graphics.TOP);
+            if (i >= n) {
+                break;
+            }
+            int cut = lineBreakCut(font, text, n, i, maxWidth);
+            g.drawSubstring(text, i, cut - i, x, y, Graphics.LEFT | Graphics.TOP);
             y += lineH;
             i = (cut < n && text.charAt(cut) == ' ') ? cut + 1 : cut;
         }
@@ -58,26 +93,7 @@ public final class UiCanvasUtil {
             if (i >= n) {
                 break;
             }
-            int end = i;
-            int lastFitSpace = -1;
-            while (end < n) {
-                if (text.charAt(end) == ' ') {
-                    lastFitSpace = end;
-                }
-                String s = text.substring(i, end + 1);
-                if (font.stringWidth(s) > maxWidth) {
-                    break;
-                }
-                end++;
-            }
-            int cut;
-            if (end >= n) {
-                cut = n;
-            } else if (lastFitSpace >= i) {
-                cut = lastFitSpace;
-            } else {
-                cut = end > i ? end : (i + 1);
-            }
+            int cut = lineBreakCut(font, text, n, i, maxWidth);
             lines++;
             i = (cut < n && text.charAt(cut) == ' ') ? cut + 1 : cut;
         }
@@ -85,31 +101,28 @@ public final class UiCanvasUtil {
     }
 
     public static int drawWrappedCentered(Graphics g, String text, int x, int y, int maxWidth) {
-        if (text == null) text = "";
-        int lineH = g.getFont().getHeight();
+        if (text == null) {
+            text = "";
+        }
+        Font font = g.getFont();
+        int lineH = font.getHeight();
         int startY = y;
         int n = text.length();
         int i = 0;
         while (i < n) {
-            while (i < n && text.charAt(i) == ' ') i++;
-            if (i >= n) break;
-            int end = i;
-            int lastFitSpace = -1;
-            while (end < n) {
-                if (text.charAt(end) == ' ') lastFitSpace = end;
-                String s = text.substring(i, end + 1);
-                if (g.getFont().stringWidth(s) > maxWidth) break;
-                end++;
+            while (i < n && text.charAt(i) == ' ') {
+                i++;
             }
-            int cut;
-            if (end >= n) cut = n;
-            else if (lastFitSpace >= i) cut = lastFitSpace;
-            else cut = end > i ? end : (i + 1);
-            String line = text.substring(i, cut);
-            int tw = g.getFont().stringWidth(line);
+            if (i >= n) {
+                break;
+            }
+            int cut = lineBreakCut(font, text, n, i, maxWidth);
+            int tw = substringWidthChars(font, text, i, cut);
             int drawX = x + ((maxWidth - tw) / 2);
-            if (drawX < x) drawX = x;
-            g.drawString(line, drawX, y, Graphics.LEFT | Graphics.TOP);
+            if (drawX < x) {
+                drawX = x;
+            }
+            g.drawSubstring(text, i, cut - i, drawX, y, Graphics.LEFT | Graphics.TOP);
             y += lineH;
             i = (cut < n && text.charAt(cut) == ' ') ? cut + 1 : cut;
         }

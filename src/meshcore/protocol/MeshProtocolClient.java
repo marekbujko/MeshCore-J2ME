@@ -235,6 +235,34 @@ public final class MeshProtocolClient {
         return new long[]{nodeFreq, nodeBw, nodeSf, nodeCr, nodeTxPwr};
     }
 
+    /**
+     * CMD_SET_ADVERT_LATLON: int32 lat/lon (degrees * 1e6), signed, little-endian.
+     */
+    public static void sendSetAdvertLatLon(FrameTransport transport, int latE6, int lonE6) throws IOException {
+        byte[] f = new byte[9];
+        f[0] = (byte) ProtocolConstants.CMD_SET_ADVERT_LATLON;
+        FrameTransport.writeUint32LE(f, 1, latE6 & 0xFFFFFFFFL);
+        FrameTransport.writeUint32LE(f, 5, lonE6 & 0xFFFFFFFFL);
+        transport.sendFrame(f);
+    }
+
+    /**
+     * CMD_SET_OTHER_PARAMS: preserve manual/telemetry/multi_acks from last self-info; set advert location policy.
+     */
+    public static void sendSetOtherParamsAdvertPolicy(FrameTransport transport,
+            int manualAddContacts,
+            int telemetryPacked,
+            int advertLocPolicy,
+            int multiAcks) throws IOException {
+        byte[] f = new byte[5];
+        f[0] = (byte) ProtocolConstants.CMD_SET_OTHER_PARAMS;
+        f[1] = (byte) (manualAddContacts & 0xFF);
+        f[2] = (byte) (telemetryPacked & 0xFF);
+        f[3] = (byte) (advertLocPolicy & 0xFF);
+        f[4] = (byte) (multiAcks & 0xFF);
+        transport.sendFrame(f);
+    }
+
     // Minimal interface to decouple from concrete SettingsScreen implementation.
     public interface SettingsScreenLike {
         String getFreq();

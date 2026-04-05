@@ -35,7 +35,7 @@ public final class MessageSettingsScreen extends List implements CommandListener
 
     public void commandAction(Command c, Displayable d) {
         if (c == cmdBack) {
-            app.showSettingsScreen();
+            app.returnToSettingsScreen();
             return;
         }
         if (c == List.SELECT_COMMAND) {

@@ -47,4 +47,58 @@ public final class ParseUtils {
             return def;
         }
     }
+
+    /**
+     * Parse a decimal degrees string (e.g. "-12.345678") to fixed-point * 1E6.
+     * Returns {@code def} if empty or invalid.
+     */
+    public static int parseCoordDegreesToE6(String s, int def) {
+        if (s == null) {
+            return def;
+        }
+        s = s.trim();
+        if (s.length() == 0) {
+            return def;
+        }
+        boolean neg = false;
+        int i = 0;
+        if (s.charAt(0) == '-') {
+            neg = true;
+            i = 1;
+        } else if (s.charAt(0) == '+') {
+            i = 1;
+        }
+        try {
+            String rest = s.substring(i);
+            int dot = rest.indexOf('.');
+            String wstr = dot < 0 ? rest : rest.substring(0, dot);
+            if (wstr.length() == 0) {
+                wstr = "0";
+            }
+            long wholeMag = Long.parseLong(wstr);
+            long frac = 0;
+            int fracDigits = 0;
+            if (dot >= 0 && dot + 1 < rest.length()) {
+                String f = rest.substring(dot + 1);
+                if (f.length() > 6) {
+                    f = f.substring(0, 6);
+                }
+                fracDigits = f.length();
+                if (fracDigits > 0) {
+                    frac = Long.parseLong(f);
+                }
+            }
+            for (int k = fracDigits; k < 6; k++) {
+                frac *= 10;
+            }
+            long mag = wholeMag * 1000000L + frac;
+            long contrib = neg ? -mag : mag;
+            if (contrib > 2147483647L || contrib < -2147483648L) {
+                return def;
+            }
+            return (int) contrib;
+        } catch (NumberFormatException e) {
+            return def;
+        }
+    }
 }

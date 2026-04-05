@@ -27,7 +27,11 @@ public interface AppController {
     void showMyContactCode();
     /** Show Share My Contact and return to the given screen on Back. */
     void showMyContactCode(Displayable returnTo);
-    void showSettingsScreen();
+    void showSettingsScreen(Displayable returnTo);
+    /** Return from Message settings to the existing Settings screen (preserves Back target). */
+    void returnToSettingsScreen();
+    void showDeviceInfoScreen(Displayable returnTo);
+    void notifyDeviceInfoClosed();
     void showActivityLogScreen();
 
     void showMessageSettingsScreen();
@@ -74,9 +78,9 @@ public interface AppController {
     void saveSettings();
     void sendGetBattery();
     void sendRefreshSettings();
-    void sendGetStats();
     void sendGetRadioStats();
-    void sendGetDeviceTime();
+    /** Battery + node stats + clock (for Device info screen). */
+    void requestSettingsLiveReadings();
     void sendAdvert();
     void setAdvertType(int type);
     int getAdvertType();

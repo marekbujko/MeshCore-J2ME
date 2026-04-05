@@ -14,10 +14,16 @@ public interface FrameHandlerListener {
     void onDeviceInfo(String firmwareVer);
     void onSelfInfo(String nodeName, int txPwr, long freq, long bw, int sf, int cr,
                     byte[] nodePublicKey, int advLatE6, int advLonE6);
+    /**
+     * Extended RESP_SELF_INFO (v7+): offsets 44..47 after pubkey, lat, lon — multi_acks, advert_loc_policy,
+     * telemetry mode byte, manual_add_contacts. Only called when the frame is long enough.
+     */
+    void onCompanionOtherParams(int multiAcks, int advertLocPolicy, int telemetryPacked, int manualAddContacts);
     void onChannelInfo(int channelIndex, String name);
     void onContactsStart();
     void onContactsEnd();
-    void onStats(String title, String content);
+    /** STATS sub_type=0: node uptime in seconds. */
+    void onNodeMetrics(long uptimeSeconds);
     /** RADIO stats (sub_type=1): noise floor in dBm. */
     void onNoiseFloor(int noiseFloorDbm);
     void onDeviceTime(String content);

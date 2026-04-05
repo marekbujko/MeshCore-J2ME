@@ -31,6 +31,7 @@ public final class ContactDetailsScreen extends Canvas implements CommandListene
     private final String outPathText;
     private final String outPathRepeatersText;
     private final UiScrollController scrollCtrl = new UiScrollController();
+    private final UiScrollRepaintThrottler scrollDragRepaint = new UiScrollRepaintThrottler();
 
     private final Command cmdBack;
     private final Command cmdCopyKey;
@@ -341,18 +342,24 @@ public final class ContactDetailsScreen extends Canvas implements CommandListene
     protected void pointerDragged(int x, int y) {
         ensureDetailFonts();
         int w = getWidth();
-        int hh = UiScreenHeader.measureHeight(w, "Details", null, titleFont, smallFont);
+        int hh = headerBarHeight > 0 ? headerBarHeight
+                : UiScreenHeader.measureHeight(w, "Details", null, titleFont, smallFont);
         int vh = getHeight() - hh;
         if (vh < 1) {
             vh = 1;
         }
         if (scrollCtrl.onDrag(y, vh)) {
-            repaint();
+            scrollDragRepaint.repaintDrag(this, UiScrollRepaintThrottler.DEFAULT_DRAG_INTERVAL_MS,
+                    0, hh, w, getHeight() - hh);
         }
     }
 
     protected void pointerReleased(int x, int y) {
         scrollCtrl.pointerReleased();
+        int w = getWidth();
+        int hh = headerBarHeight > 0 ? headerBarHeight
+                : UiScreenHeader.measureHeight(w, "Details", null, titleFont, smallFont);
+        scrollDragRepaint.flushRepaint(this, 0, hh, w, getHeight() - hh);
     }
 
     private void openCopyBox(String title, String value) {

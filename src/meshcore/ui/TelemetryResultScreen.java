@@ -10,7 +10,7 @@ import javax.microedition.lcdui.Graphics;
 import meshcore.util.TextUtils;
 
 /**
- * Shows telemetry progress; on success: round-trip time, then channel 1 (self) lines,
+ * Shows telemetry progress; on success: readings (channel 1 / self), round-trip time,
  * then full-payload raw hex.
  */
 public final class TelemetryResultScreen extends Canvas implements CommandListener {
@@ -38,13 +38,14 @@ public final class TelemetryResultScreen extends Canvas implements CommandListen
     private volatile int waitGeneration = 0;
     private volatile String contactName = "";
     private volatile String bodyText = "";
-    /** Channel 1 (TELEM_CHANNEL_SELF) decoded lines, shown under Round-trip Duration. */
+    /** Channel 1 (TELEM_CHANNEL_SELF) decoded lines, shown under Round Trip Duration. */
     private volatile String ch1Lines = "";
     /** Full LPP payload hex. */
     private volatile String rawHexBlock = "";
     private volatile String durationLabel = "";
 
     private final UiScrollController scrollCtrl = new UiScrollController();
+    private final UiScrollRepaintThrottler scrollDragRepaint = new UiScrollRepaintThrottler();
     private Font titleFont;
     private Font bodyFont;
     private Font smallFont;
@@ -204,21 +205,6 @@ public final class TelemetryResultScreen extends Canvas implements CommandListen
         g.clipRect(0, headerBarH, w, viewportH);
         int y = headerBarH - scrollY + 10;
 
-        if (durationLabel != null && durationLabel.length() > 0 && state == ST_OK) {
-            g.setFont(sectionHeaderFont);
-            g.setColor(UiTheme.BAR_BG);
-            g.fillRect(x, y, 4, sectionHeaderFont.getHeight() + 2);
-            g.setColor(UiTheme.TEXT_DARK);
-            y += UiCanvasUtil.drawWrapped(g, "Round trip", x + 10, y, maxW - 10);
-            y += 6;
-            g.setFont(bodyFont);
-            g.setColor(UiTheme.TEXT_GRAY);
-            y += UiCanvasUtil.drawWrapped(g, durationLabel, x + 10, y, maxW - 10);
-            y += 14;
-            g.setColor(UiTheme.CARD_BORDER);
-            g.drawLine(x + 4, y, x + maxW - 4, y);
-            y += 12;
-        }
         if (state == ST_OK) {
             String c1 = ch1Lines;
             if (c1 != null && c1.length() > 0) {
@@ -236,6 +222,23 @@ public final class TelemetryResultScreen extends Canvas implements CommandListen
                 g.drawLine(x + 4, y, x + maxW - 4, y);
                 y += 12;
             }
+        }
+        if (durationLabel != null && durationLabel.length() > 0 && state == ST_OK) {
+            g.setFont(sectionHeaderFont);
+            g.setColor(UiTheme.BAR_BG);
+            g.fillRect(x, y, 4, sectionHeaderFont.getHeight() + 2);
+            g.setColor(UiTheme.TEXT_DARK);
+            y += UiCanvasUtil.drawWrapped(g, "Round Trip Duration", x + 10, y, maxW - 10);
+            y += 6;
+            g.setFont(bodyFont);
+            g.setColor(UiTheme.TEXT_GRAY);
+            y += UiCanvasUtil.drawWrapped(g, durationLabel, x + 10, y, maxW - 10);
+            y += 14;
+            g.setColor(UiTheme.CARD_BORDER);
+            g.drawLine(x + 4, y, x + maxW - 4, y);
+            y += 12;
+        }
+        if (state == ST_OK) {
             g.setFont(sectionHeaderFont);
             g.setColor(UiTheme.BAR_BG);
             g.fillRect(x, y, 4, sectionHeaderFont.getHeight() + 2);
@@ -358,17 +361,24 @@ public final class TelemetryResultScreen extends Canvas implements CommandListen
         }
         int w = getWidth();
         int h = getHeight();
-        int hh = UiScreenHeader.measureHeight(w, "Telemetry", null, titleFont, smallFont);
+        int hh = headerBarHeight > 0 ? headerBarHeight
+                : UiScreenHeader.measureHeight(w, "Telemetry", null, titleFont, smallFont);
         int vh = h - hh;
         if (vh < 1) {
             vh = 1;
         }
         if (scrollCtrl.onDrag(y, vh)) {
-            repaint();
+            scrollDragRepaint.repaintDrag(this, UiScrollRepaintThrottler.DEFAULT_DRAG_INTERVAL_MS,
+                    0, hh, w, h - hh);
         }
     }
 
     protected void pointerReleased(int x, int y) {
         scrollCtrl.pointerReleased();
+        int w = getWidth();
+        int h = getHeight();
+        int hh = headerBarHeight > 0 ? headerBarHeight
+                : UiScreenHeader.measureHeight(w, "Telemetry", null, titleFont, smallFont);
+        scrollDragRepaint.flushRepaint(this, 0, hh, w, h - hh);
     }
 }

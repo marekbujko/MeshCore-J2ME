@@ -62,7 +62,7 @@ public final class MoreMenuScreen extends List implements CommandListener {
             } else if (sel == IDX_TOOLS) {
                 app.showToolsScreen(this);
             } else if (sel == IDX_SETTINGS) {
-                app.showSettingsScreen();
+                app.showSettingsScreen(this);
             } else if (sel == IDX_ABOUT) {
                 app.getDisplay().setCurrent(new AboutScreen(app, this));
             }

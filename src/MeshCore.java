@@ -39,6 +39,7 @@ import meshcore.ui.DMScreen;
 import meshcore.ui.ShareContactScreen;
 import meshcore.ui.ShareQrScreen;
 import meshcore.ui.SettingsScreen;
+import meshcore.ui.DeviceInfoScreen;
 import meshcore.ui.MessageSettingsScreen;
 import meshcore.ui.Alerts;
 import meshcore.ui.NotificationPresenter;
@@ -67,7 +68,7 @@ import meshcore.util.RepeaterPasswordStore;
  *   5. ContactsScreen   - Contact list (non-repeaters), tap to open DM
  *   6. RepeatersScreen  - Repeaters discovered via adverts
  *   7. DMScreen         - Direct message with a contact
- *   8. SettingsScreen   - Radio params, node name, battery, stats
+ *   8. SettingsScreen   - Radio params, node name, advert position
  *   9. ActivityLogScreen- App + protocol event log
  *
  * Protocol: MeshCore Companion Radio binary frame protocol over TCP
@@ -102,6 +103,12 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private int nodeAdvLatE6 = Integer.MIN_VALUE;
     private int nodeAdvLonE6 = Integer.MIN_VALUE;
     private int advertType = 0; // 0 = Zero hop, 1 = Flood (per protocol)
+    /** RESP_SELF_INFO bytes 44–47; for CMD_SET_OTHER_PARAMS without clobbering prefs. */
+    private boolean companionPrefsKnown;
+    private int companionMultiAcks;
+    private int companionAdvertLocPolicy;
+    private int companionTelemetryPacked;
+    private int companionManualAddContacts;
 
     // Screen references (for UI updates from background threads)
     private ConnectScreen connectScreen;
@@ -112,6 +119,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     private NotificationsScreen notificationsScreen;
     private DMScreen dmScreen;
     private SettingsScreen settingsScreen;
+    private DeviceInfoScreen deviceInfoScreen;
     private RepeatersScreen repeatersScreen;
     private ActivityLogScreen activityLogScreen;
     private ToolsScreen toolsScreen;
@@ -226,9 +234,9 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                             }
                             String text;
                             if (durationMs >= 0) {
-                                text = "Round-trip Duration: " + durationMs + " ms";
+                                text = "Round Trip Duration: " + durationMs + " ms";
                             } else {
-                                text = "Round-trip Duration: n/a";
+                                text = "Round Trip Duration: n/a";
                             }
                             String rawName = contactStore.getName(contactIdx);
                             String title = TextUtils.sanitizeLabel(rawName, 32);
@@ -245,7 +253,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                         StringBuffer msg = new StringBuffer(
                                 "Login failed. Wrong password or access denied.");
                         if (durationMs >= 0) {
-                            msg.append("\n\nRound-trip Duration: ");
+                            msg.append("\n\nRound Trip Duration: ");
                             msg.append(durationMs);
                             msg.append(" ms");
                         }
@@ -545,15 +553,32 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         return s.substring(last + 1).trim();
     }
 
-    public void showSettingsScreen() {
-        settingsScreen = new SettingsScreen(this, nodeName, firmwareVer,
-                nodePublicKeyHex, nodeFreq, nodeBw, nodeSf, nodeCr, nodeTxPwr);
+    public void showSettingsScreen(Displayable returnTo) {
+        settingsScreen = new SettingsScreen(this, returnTo, nodeName,
+                nodeFreq, nodeBw, nodeSf, nodeCr, nodeTxPwr);
         display.setCurrent(settingsScreen);
         new Thread(new Runnable() {
             public void run() {
-                sendGetBattery();
+                requestSettingsLiveReadings();
             }
         }).start();
+    }
+
+    public void returnToSettingsScreen() {
+        if (settingsScreen != null) {
+            display.setCurrent(settingsScreen);
+        } else {
+            showMainMenu();
+        }
+    }
+
+    public void showDeviceInfoScreen(Displayable returnTo) {
+        deviceInfoScreen = new DeviceInfoScreen(this, returnTo, nodeName, firmwareVer, nodePublicKeyHex);
+        display.setCurrent(deviceInfoScreen);
+    }
+
+    public void notifyDeviceInfoClosed() {
+        deviceInfoScreen = null;
     }
 
     public void showMessageSettingsScreen() {
@@ -764,6 +789,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         running = false;
         connected = false;
         keepAliveRunning = false;
+        companionPrefsKnown = false;
         notificationSuppressed = false;
         pendingNotificationKeys.removeAllElements();
         pendingNotificationMessages.removeAllElements();
@@ -1252,15 +1278,20 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         } catch (IOException ignore) {}
     }
 
-    public void sendGetStats() {
+    public void requestSettingsLiveReadings() {
+        sendGetBattery();
         if (transport == null) {
-            appendActivityLog("[!] Cannot get stats while disconnected");
             return;
         }
         try {
             MeshProtocolClient.sendGetStats(transport);
         } catch (IOException e) {
             appendActivityLog("[!] Stats failed");
+        }
+        try {
+            MeshProtocolClient.sendGetDeviceTime(transport);
+        } catch (IOException e) {
+            appendActivityLog("[!] Time failed");
         }
     }
 
@@ -1273,18 +1304,6 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             MeshProtocolClient.sendGetRadioStats(transport);
         } catch (IOException e) {
             appendActivityLog("[!] Radio stats failed");
-        }
-    }
-
-    public void sendGetDeviceTime() {
-        if (transport == null) {
-            appendActivityLog("[!] Cannot get device time while disconnected");
-            return;
-        }
-        try {
-            MeshProtocolClient.sendGetDeviceTime(transport);
-        } catch (IOException e) {
-            appendActivityLog("[!] Time failed");
         }
     }
 
@@ -1353,13 +1372,34 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             nodeSf   = (int) vals[2];
             nodeCr   = (int) vals[3];
             nodeTxPwr= (int) vals[4];
+            boolean sharePos = settingsScreen.getSharePositionInAdvert();
+            int advLat = settingsScreen.getAdvertLatE6Parsed();
+            int advLon = settingsScreen.getAdvertLonE6Parsed();
+            if (advLat != Integer.MIN_VALUE && advLon != Integer.MIN_VALUE) {
+                MeshProtocolClient.sendSetAdvertLatLon(transport, advLat, advLon);
+                nodeAdvLatE6 = advLat;
+                nodeAdvLonE6 = advLon;
+            }
+            int manual = companionPrefsKnown ? companionManualAddContacts : 1;
+            int telem = companionPrefsKnown ? companionTelemetryPacked : 0;
+            int multi = companionPrefsKnown ? companionMultiAcks : 0;
+            int policy = sharePos ? ProtocolConstants.ADVERT_LOC_SHARE : ProtocolConstants.ADVERT_LOC_NONE;
+            MeshProtocolClient.sendSetOtherParamsAdvertPolicy(transport, manual, telem, policy, multi);
+            companionAdvertLocPolicy = policy;
+            if (sharePos && (advLat == Integer.MIN_VALUE || advLon == Integer.MIN_VALUE)) {
+                appendActivityLog("[!] Enter latitude and longitude so the radio can send them in adverts.");
+            }
+            meshcore.util.SettingsExtrasStore.saveSharePositionInAdvert(sharePos);
             appendActivityLog("[*] Settings saved");
             final SettingsScreen set = settingsScreen;
+            final DeviceInfoScreen di = deviceInfoScreen;
             display.callSerially(new Runnable() {
                 public void run() {
                     if (set != null) {
-                        set.setNodeInfo(nodeName, firmwareVer);
                         set.showInfo("Settings saved", "Settings have been updated.");
+                    }
+                    if (di != null && display.getCurrent() == di) {
+                        di.setNodeInfo(nodeName, firmwareVer);
                     }
                 }
             });
@@ -1790,15 +1830,37 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         trySyncMessages();
     }
 
+    public void onCompanionOtherParams(int multiAcks, int advertLocPolicy, int telemetryPacked, int manualAddContacts) {
+        companionPrefsKnown = true;
+        companionMultiAcks = multiAcks;
+        companionAdvertLocPolicy = advertLocPolicy;
+        companionTelemetryPacked = telemetryPacked;
+        companionManualAddContacts = manualAddContacts;
+    }
+
     private void refreshSettingsNodeIfShown() {
         final SettingsScreen set = settingsScreen;
-        if (set == null) return;
+        final DeviceInfoScreen di = deviceInfoScreen;
+        if (set == null && di == null) {
+            return;
+        }
         final String keyHex = nodePublicKeyHex;
+        final long fq = nodeFreq;
+        final long bw = nodeBw;
+        final int sf = nodeSf;
+        final int cr = nodeCr;
+        final int tx = nodeTxPwr;
+        final int la = nodeAdvLatE6;
+        final int lo = nodeAdvLonE6;
         display.callSerially(new Runnable() {
             public void run() {
-                if (display.getCurrent() == set) {
-                    set.setNodeInfo(nodeName, firmwareVer);
-                    set.setPublicKey(keyHex);
+                Displayable cur = display.getCurrent();
+                if (set != null && cur == set) {
+                    set.syncRadioAndPositionFromNode(fq, bw, sf, cr, tx, la, lo);
+                }
+                if (di != null && cur == di) {
+                    di.setNodeInfo(nodeName, firmwareVer);
+                    di.setPublicKey(keyHex);
                 }
             }
         });
@@ -1850,20 +1912,24 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void onBatteryUpdate(final String info) {
-        final SettingsScreen set = settingsScreen;
-        lastBatteryStatus = SettingsPresenter.handleBatteryUpdate(set, info);
+        lastBatteryStatus = SettingsPresenter.handleBatteryUpdate(null, info);
+        final DeviceInfoScreen di = deviceInfoScreen;
         display.callSerially(new Runnable() {
             public void run() {
-                // Battery UI already updated in presenter; nothing else to do here.
+                if (di != null && display.getCurrent() == di) {
+                    SettingsPresenter.handleBatteryUpdate(di, info);
+                }
             }
         });
     }
 
-    public void onStats(final String title, final String content) {
-        final SettingsScreen set = settingsScreen;
+    public void onNodeMetrics(final long uptimeSeconds) {
+        final DeviceInfoScreen di = deviceInfoScreen;
         display.callSerially(new Runnable() {
             public void run() {
-                SettingsPresenter.showStats(set, title, content);
+                if (di != null && display.getCurrent() == di) {
+                    di.setUptimeSeconds(uptimeSeconds);
+                }
             }
         });
     }
@@ -1884,11 +1950,13 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         });
     }
 
-    public void onDeviceTime(final String content) {
-        final SettingsScreen set = settingsScreen;
+    public void onDeviceTime(final String utcFormatted) {
+        final DeviceInfoScreen di = deviceInfoScreen;
         display.callSerially(new Runnable() {
             public void run() {
-                SettingsPresenter.showDeviceTime(set, content);
+                if (di != null && display.getCurrent() == di) {
+                    di.setNodeClockUtc(utcFormatted);
+                }
             }
         });
     }
