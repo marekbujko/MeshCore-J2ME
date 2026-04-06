@@ -32,6 +32,14 @@ public final class UiTheme {
     public static final int SNR_TEXT = 0x444444;
     public static final int ARROW = 0x7F878E;
 
+    /** Ping/trace repeater chips: forest terminal (deep pine + mint accent). */
+    public static final int TIMELINE_NODE_FILL = 0x132A22;
+    public static final int TIMELINE_NODE_BORDER = 0x3A6B5A;
+    public static final int TIMELINE_NODE_ACCENT = 0x6BCB77;
+    public static final int TIMELINE_NODE_TEXT = 0xD8F3DC;
+    public static final int TIMELINE_SNR_TEXT = 0x2A4A3E;
+    public static final int TIMELINE_ARROW = 0x4A9B6B;
+
     // Scroll bar.
     public static final int SCROLL_BAR_BG = 0xBBBBBB;
     public static final int SCROLL_BAR_THUMB = 0x666666;

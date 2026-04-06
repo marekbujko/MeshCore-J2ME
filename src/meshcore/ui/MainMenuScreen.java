@@ -27,8 +27,20 @@ public class MainMenuScreen extends Canvas implements CommandListener {
     private int rightColX;
     private int rightCellW;
     private int rightCellH;
-    private static final int BOTTOM_BAR_H = 52;
-    private static final int BAR_ICON_ZONE = 32;
+    private static final int BOTTOM_BAR_H = 60;
+    /** Bottom bar: same inset on all sides for the selection pill. */
+    private static final int BAR_INSET = 5;
+    private static final int BAR_PILL_R = 6;
+    /** Extra space above icons inside the bar. */
+    private static final int BAR_ICON_TOP_PAD = 3;
+    /** Space between icon bottom and label top. */
+    private static final int BAR_LABEL_GAP = 7;
+    /** Label baseline inset from bottom of bar (can be < BAR_INSET to sit a touch lower). */
+    private static final int BAR_BOTTOM_INSET = 4;
+    /** Shift label up a few pixels (smaller Y). */
+    private static final int BAR_LABEL_NUDGE_UP = 2;
+    /** Pull dashboard text block up inside the card. */
+    private static final int DASH_NUDGE_UP = 4;
 
     private final AppController app;
     private final Command cmdSelect;
@@ -64,6 +76,12 @@ public class MainMenuScreen extends Canvas implements CommandListener {
     private int gridY;
     private int barY;
     private int barItemW;
+
+    private Font bodyFont;
+    private Font labelFont;
+    /** Smaller fonts for dashboard (fits narrow / short screens). */
+    private Font dashBodyFont;
+    private Font dashLabelFont;
 
     public MainMenuScreen(AppController app) {
         super();
@@ -110,6 +128,17 @@ public class MainMenuScreen extends Canvas implements CommandListener {
 
     private static Image loadIcon(String path) {
         return ImageCache.get(path);
+    }
+
+    private void ensureFonts() {
+        if (bodyFont == null) {
+            bodyFont = Font.getFont(Font.FACE_PROPORTIONAL, Font.STYLE_PLAIN, Font.SIZE_SMALL);
+            labelFont = Font.getFont(Font.FACE_PROPORTIONAL, Font.STYLE_BOLD, Font.SIZE_SMALL);
+        }
+        if (dashBodyFont == null) {
+            dashBodyFont = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL);
+            dashLabelFont = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_SMALL);
+        }
     }
 
     private void layout(int w, int h) {
@@ -176,34 +205,47 @@ public class MainMenuScreen extends Canvas implements CommandListener {
     }
 
     protected void paint(Graphics g) {
-        g.setFont(Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL));
+        ensureFonts();
+        g.setFont(bodyFont);
         int w = getWidth();
         int h = getHeight();
         layout(w, h);
-        g.setColor(0xF8F8F8);
+        g.setColor(UiTheme.PANEL_BG);
         g.fillRect(0, 0, w, h);
-        int fh = g.getFont().getHeight();
 
         int leftX = PAD;
-        int dashW = leftPanelW - 8;
+        int dashIns = w < 220 ? 4 : 5;
+        int spineX = leftX + 3;
+        int textX = leftX + dashIns + 6;
+        int dashW = leftPanelW - (textX - leftX) - dashIns;
 
-        g.setColor(0xD8D8D8);
-        g.drawRect(leftX, gridY, leftPanelW, leftPanelH);
-        g.drawRect(rightColX, gridY, rightCellW, rightCellH);
-        g.drawRect(rightColX, gridY + rightCellH + PAD, rightCellW, rightCellH);
+        int cardR = 8;
+        g.setColor(UiTheme.CARD_FILL);
+        g.fillRoundRect(leftX, gridY, leftPanelW, leftPanelH, cardR, cardR);
+        g.setColor(UiTheme.TIMELINE_NODE_ACCENT);
+        g.fillRect(spineX, gridY + 6, 4, leftPanelH - 12);
+        g.setColor(UiTheme.CARD_BORDER);
+        g.drawRoundRect(leftX, gridY, leftPanelW - 1, leftPanelH - 1, cardR, cardR);
 
-        int ins = 4;
-        int py = gridY + ins;
-        g.setColor(0x606060);
-        g.drawString("My Node", leftX + ins, py, Graphics.LEFT | Graphics.TOP);
+        int dLabH = dashLabelFont.getHeight();
+        int dBodyH = dashBodyFont.getHeight();
+        int secGap = 3;
+
+        int py = gridY + dashIns - DASH_NUDGE_UP;
+        g.setFont(dashLabelFont);
+        g.setColor(UiTheme.TEXT_GRAY);
+        g.drawString("My Node", textX, py, Graphics.LEFT | Graphics.TOP);
         String nodeName = app.getNodeName();
         if (nodeName == null || nodeName.length() == 0) nodeName = "-";
-        g.setColor(0x000000);
-        py += fh;
-        g.drawString(trimForWidth(g, nodeName, dashW), leftX + ins, py, Graphics.LEFT | Graphics.TOP);
-        py += fh + 4;
-        g.setColor(0x606060);
-        g.drawString("Noise Floor", leftX + ins, py, Graphics.LEFT | Graphics.TOP);
+        py += dLabH;
+        g.setFont(dashBodyFont);
+        g.setColor(UiTheme.TEXT_DARK);
+        g.drawString(trimForWidth(g, nodeName, dashW), textX, py, Graphics.LEFT | Graphics.TOP);
+        py += dBodyH + secGap;
+
+        g.setFont(dashLabelFont);
+        g.setColor(UiTheme.TEXT_GRAY);
+        g.drawString("Noise Floor", textX, py, Graphics.LEFT | Graphics.TOP);
         Integer noise = app.getNoiseFloor();
         String noiseText;
         if (noise != null) {
@@ -211,49 +253,100 @@ public class MainMenuScreen extends Canvas implements CommandListener {
         } else {
             noiseText = "Loading...";
         }
-        g.setColor(0x000000);
-        py += fh;
-        g.drawString(trimForWidth(g, noiseText, dashW), leftX + ins, py, Graphics.LEFT | Graphics.TOP);
-        py += fh + 4;
-        g.setColor(0x606060);
-        g.drawString("Latest Log", leftX + ins, py, Graphics.LEFT | Graphics.TOP);
+        py += dLabH;
+        g.setFont(dashBodyFont);
+        g.setColor(UiTheme.TEXT_DARK);
+        g.drawString(trimForWidth(g, noiseText, dashW), textX, py, Graphics.LEFT | Graphics.TOP);
+        py += dBodyH + secGap;
+
+        g.setFont(dashLabelFont);
+        g.setColor(UiTheme.TEXT_GRAY);
+        g.drawString("Latest Log", textX, py, Graphics.LEFT | Graphics.TOP);
+        py += dLabH;
+
         String latestLog = app.getLatestActivityLogLine();
         if (latestLog == null || latestLog.length() == 0) latestLog = "-";
-        g.setColor(0x000000);
-        py += fh;
-        g.drawString(trimForWidth(g, latestLog, dashW), leftX + ins, py, Graphics.LEFT | Graphics.TOP);
+        int cardBottom = gridY + leftPanelH - dashIns;
+        int maxLogH = Math.max(dBodyH, cardBottom - py);
+        g.setFont(dashBodyFont);
+        g.setColor(UiTheme.TEXT_DARK);
+        String logFit = fitDashboardLog(dashBodyFont, latestLog, dashW, maxLogH);
+        UiCanvasUtil.drawWrapped(g, logFit, textX, py, dashW);
 
+        g.setColor(UiTheme.BAR_BG);
+        g.fillRect(0, barY, w, BOTTOM_BAR_H);
+
+        int tileR = 8;
         int[] b = new int[4];
         for (int i = 0; i < ITEMS; i++) {
             cellBounds(i, b);
             int cx = b[0], cy = b[1], cw = b[2], ch = b[3];
             boolean selected = (i == selectedIndex);
-            if (selected) {
-                g.setColor(0xC0C0C0);
-                g.fillRect(cx, cy, cw, ch);
-            }
-            g.setColor(0x000000);
-            Image icon = getIcon(i);
-            if (icon != null) {
-                int ix = cx + cw / 2;
-                int iy;
-                int anchor;
-                if (i < IDX_CHANNEL) {
-                    iy = cy + ch / 2;
-                    anchor = Graphics.HCENTER | Graphics.VCENTER;
-                } else {
-                    iy = cy + 2;
-                    anchor = Graphics.HCENTER | Graphics.TOP;
+            if (i < IDX_CHANNEL) {
+                g.setColor(selected ? 0xD4EDE0 : UiTheme.CARD_FILL);
+                g.fillRoundRect(cx, cy, cw, ch, tileR, tileR);
+                g.setColor(UiTheme.CARD_BORDER);
+                g.drawRoundRect(cx, cy, cw - 1, ch - 1, tileR, tileR);
+                if (selected) {
+                    g.setColor(UiTheme.TIMELINE_NODE_ACCENT);
+                    g.drawRoundRect(cx + 1, cy + 1, cw - 3, ch - 3, tileR - 1, tileR - 1);
                 }
-                g.drawImage(icon, ix, iy, anchor);
-            }
-            if (i >= IDX_CHANNEL) {
+                g.setColor(UiTheme.TEXT_DARK);
+                Image icon = getIcon(i);
+                if (icon != null) {
+                    g.drawImage(icon, cx + cw / 2, cy + ch / 2,
+                            Graphics.HCENTER | Graphics.VCENTER);
+                }
+            } else {
+                if (selected) {
+                    g.setColor(UiTheme.CARD_FILL);
+                    g.fillRoundRect(cx + BAR_INSET, cy + BAR_INSET, cw - 2 * BAR_INSET, ch - 2 * BAR_INSET,
+                            BAR_PILL_R, BAR_PILL_R);
+                }
+                g.setFont(bodyFont);
+                int labH = bodyFont.getHeight();
+                int labelY = cy + ch - BAR_BOTTOM_INSET - labH - BAR_LABEL_NUDGE_UP;
+                Image icon = getIcon(i);
+                if (icon != null) {
+                    int ih = icon.getHeight();
+                    int bandTop = cy + BAR_INSET + BAR_ICON_TOP_PAD;
+                    int bandBot = labelY - BAR_LABEL_GAP;
+                    int slack = bandBot - bandTop - ih;
+                    int iconTop = bandTop + (slack > 0 ? slack / 2 : 0);
+                    g.drawImage(icon, cx + cw / 2, iconTop, Graphics.HCENTER | Graphics.TOP);
+                }
+                g.setColor(selected ? UiTheme.TEXT_DARK : UiTheme.BAR_TEXT);
                 String lab = barLabels[(i == IDX_CONTACTS) ? 0 : (i == IDX_CHANNEL) ? 1 : 2];
-                g.drawString(lab, cx + cw / 2, cy + BAR_ICON_ZONE, Graphics.HCENTER | Graphics.TOP);
+                g.drawString(lab, cx + cw / 2, labelY, Graphics.HCENTER | Graphics.TOP);
             }
         }
-        g.setColor(0xC0C0C0);
-        g.drawLine(0, barY, w, barY);
+    }
+
+    /**
+     * Shortens {@code log} so wrapped lines fit in {@code maxH} (dashboard card bottom).
+     */
+    private static String fitDashboardLog(Font font, String log, int maxW, int maxH) {
+        if (log == null || log.length() == 0) {
+            return "-";
+        }
+        if (UiCanvasUtil.measureWrappedHeight(font, log, maxW) <= maxH) {
+            return log;
+        }
+        String s = log;
+        while (s.length() > 0) {
+            if (UiCanvasUtil.measureWrappedHeight(font, s, maxW) <= maxH) {
+                return s;
+            }
+            if (s.length() <= 1) {
+                break;
+            }
+            s = s.substring(0, s.length() - 1).trim();
+            String withEllipsis = s + "..";
+            if (UiCanvasUtil.measureWrappedHeight(font, withEllipsis, maxW) <= maxH) {
+                return withEllipsis;
+            }
+        }
+        return "..";
     }
 
     private String trimForWidth(Graphics g, String s, int maxW) {

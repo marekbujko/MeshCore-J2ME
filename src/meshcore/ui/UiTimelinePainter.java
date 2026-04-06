@@ -1,5 +1,6 @@
 package meshcore.ui;
 
+import javax.microedition.lcdui.Font;
 import javax.microedition.lcdui.Graphics;
 
 /**
@@ -9,15 +10,29 @@ public final class UiTimelinePainter {
 
     private UiTimelinePainter() {}
 
+    /**
+     * Full-width repeater/hop chip: forest panel + mint accent + pale green label (see {@link UiTheme} timeline colors).
+     */
     public static int drawNodeBubble(Graphics g, int x, int y, int w, String text) {
-        int h = g.getFont().getHeight() + 8;
-        g.setColor(UiTheme.BUBBLE_FILL);
-        g.fillRoundRect(x, y, w, h, 10, 10);
-        g.setColor(UiTheme.BUBBLE_BORDER);
-        g.drawRoundRect(x, y, w, h, 10, 10);
-        g.setColor(UiTheme.BUBBLE_TEXT);
-        g.drawString(text != null ? text : "", x + 6, y + 4, Graphics.LEFT | Graphics.TOP);
-        return h + 4;
+        Font f = g.getFont();
+        int fh = f.getHeight();
+        int pillH = fh + 14;
+        int r = 8;
+        g.setColor(UiTheme.TIMELINE_NODE_FILL);
+        g.fillRoundRect(x, y, w, pillH, r, r);
+        g.setColor(UiTheme.TIMELINE_NODE_BORDER);
+        g.drawRoundRect(x, y, w - 1, pillH - 1, r, r);
+        int inset = Math.min(5, (pillH - 6) / 2);
+        if (inset > 0 && pillH > inset * 2) {
+            g.setColor(UiTheme.TIMELINE_NODE_ACCENT);
+            g.fillRect(x + 4, y + inset, 3, pillH - inset * 2);
+        }
+        g.setColor(UiTheme.TIMELINE_NODE_TEXT);
+        String s = text != null ? text : "";
+        int ty = y + (pillH - fh) / 2;
+        int tx = x + 13;
+        g.drawString(s, tx, ty, Graphics.LEFT | Graphics.TOP);
+        return pillH + 4;
     }
 
     /**
@@ -27,12 +42,12 @@ public final class UiTimelinePainter {
     public static int drawSnrArrowDown(Graphics g, int x, int y, int w, String snr) {
         int cx = x + (w / 2);
         String label = "SNR " + (snr != null ? snr : "n/a");
-        g.setColor(UiTheme.SNR_TEXT);
+        g.setColor(UiTheme.TIMELINE_SNR_TEXT);
         int tw = g.getFont().stringWidth(label);
         g.drawString(label, cx - (tw / 2), y - 3, Graphics.LEFT | Graphics.TOP);
 
         int yLine = y + g.getFont().getHeight() - 3;
-        g.setColor(UiTheme.ARROW);
+        g.setColor(UiTheme.TIMELINE_ARROW);
         // Slightly bolder shaft + larger head (double-stroke look).
         g.drawLine(cx, yLine, cx, yLine + 8);
         g.drawLine(cx + 1, yLine, cx + 1, yLine + 8);
@@ -61,7 +76,7 @@ public final class UiTimelinePainter {
         String leftLabel = "SNR " + (snrThere != null ? snrThere : "n/a");
         String rightLabel = "SNR " + (snrBack != null ? snrBack : "n/a");
 
-        g.setColor(UiTheme.SNR_TEXT);
+        g.setColor(UiTheme.TIMELINE_SNR_TEXT);
         int twL = g.getFont().stringWidth(leftLabel);
         int twR = g.getFont().stringWidth(rightLabel);
         g.drawString(leftLabel, leftX - (twL / 2), y - 3, Graphics.LEFT | Graphics.TOP);
@@ -69,7 +84,7 @@ public final class UiTimelinePainter {
 
         int yLineTop = y + g.getFont().getHeight() - 3;
         int yLineBottom = yLineTop + 8;
-        g.setColor(UiTheme.ARROW);
+        g.setColor(UiTheme.TIMELINE_ARROW);
 
         // Left: down arrow (there).
         g.drawLine(leftX, yLineTop, leftX, yLineBottom);
