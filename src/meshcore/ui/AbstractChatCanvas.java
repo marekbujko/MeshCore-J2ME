@@ -21,6 +21,8 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
     private static final int BUBBLE_PADDING = 4;
     private static final int BUBBLE_MARGIN = 4;
     private static final int MESSAGE_SPACING = 10;
+    /** Use binary search for first visible message when count is at least this (linear below). */
+    private static final int BINARY_SCAN_THRESHOLD = 48;
 
     protected final AppController app;
     protected final StringBuffer buf;
@@ -42,8 +44,15 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
 
     // Cached layout to avoid re-wrapping text on every scroll/paint
     private int[] messageHeights;
+    /** Wrapped lines per message (parallel to {@link #messages}). */
+    private Vector[] messageLines;
+    private int[] messageBubbleWidths;
+    /** prefixY[i] = sum of (height+spacing) for messages [0..i-1] from first message top. */
+    private int[] messagePrefixY;
     private int layoutWidth = -1;
     private boolean layoutDirty = true;
+
+    private final UiScrollRepaintThrottler dragRepaint = new UiScrollRepaintThrottler();
 
     // Lazy history loading state
     private boolean hasMoreHistory = true;
@@ -75,6 +84,9 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
     private void rebuildMessagesFromBuffer() {
         messages.removeAllElements();
         messageHeights = null;
+        messageLines = null;
+        messageBubbleWidths = null;
+        messagePrefixY = null;
         layoutDirty = true;
         String text = buf.toString();
         int len = text.length();
@@ -202,18 +214,25 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
         if (scrollOffset < 0) scrollOffset = 0;
         if (scrollOffset > maxScroll) scrollOffset = maxScroll;
 
-        int y = BUBBLE_MARGIN + hintHeight - scrollOffset;
-        for (int idx = 0; idx < messages.size(); idx++) {
-            ChatMessage m = (ChatMessage) messages.elementAt(idx);
-            int mh = getMessageHeight(m, maxBubbleWidth);
+        int count = messages.size();
+        if (count == 0 || messageHeights == null || messagePrefixY == null) {
+            return;
+        }
 
-            // Only draw if within viewport (with small buffer)
-            if (y + mh >= -20 && y <= h + 20) {
-                drawMessageBubble(g, m, y, maxBubbleWidth, w);
-            }
-            y += mh + MESSAGE_SPACING;
-            if (y > h + 100) {
+        int contentTop = BUBBLE_MARGIN + hintHeight;
+        int startY = contentTop - scrollOffset;
+
+        int idx = findFirstVisibleIndex(count, startY, -20);
+
+        for (; idx < count; idx++) {
+            int y = startY + messagePrefixY[idx];
+            int mh = messageHeights[idx];
+            if (y > h + 20) {
                 break;
+            }
+            if (y + mh >= -20) {
+                ChatMessage m = (ChatMessage) messages.elementAt(idx);
+                drawMessageBubble(g, m, y, w, messageLines[idx], messageBubbleWidths[idx]);
             }
         }
     }
@@ -223,11 +242,34 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
         refreshLog();
     }
 
-    private int getMessageHeight(ChatMessage m, int maxBubbleWidth) {
-        if (font == null) {
-            font = Font.getFont(Font.FACE_PROPORTIONAL, Font.STYLE_PLAIN, Font.SIZE_SMALL);
+    private int findFirstVisibleIndex(int count, int startY, int screenTopThreshold) {
+        if (count <= 0) {
+            return 0;
         }
-        Vector lines = wrapText(m.text, maxBubbleWidth - (BUBBLE_PADDING * 2));
+        if (count < BINARY_SCAN_THRESHOLD) {
+            for (int i = 0; i < count; i++) {
+                int top = startY + messagePrefixY[i];
+                if (top + messageHeights[i] >= screenTopThreshold) {
+                    return i;
+                }
+            }
+            return count;
+        }
+        int lo = 0;
+        int hi = count;
+        while (lo < hi) {
+            int mid = (lo + hi) >>> 1;
+            int bot = startY + messagePrefixY[mid] + messageHeights[mid];
+            if (bot >= screenTopThreshold) {
+                hi = mid;
+            } else {
+                lo = mid + 1;
+            }
+        }
+        return lo;
+    }
+
+    private int messageHeightFor(ChatMessage m, Vector lines) {
         int textHeight = lines.size() * font.getHeight();
         int bubbleHeight = textHeight + (BUBBLE_PADDING * 2);
         if (m.sender != null && m.sender.length() > 0) {
@@ -239,21 +281,26 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
         return bubbleHeight;
     }
 
-    private int drawMessageBubble(Graphics g, ChatMessage m, int y, int maxBubbleWidth, int screenWidth) {
-        Vector lines = wrapText(m.text, maxBubbleWidth - (BUBBLE_PADDING * 2));
+    private int computeBubbleWidth(Vector lines) {
+        int bubbleWidth = BUBBLE_PADDING * 2;
+        for (int i = 0; i < lines.size(); i++) {
+            String line = (String) lines.elementAt(i);
+            int lw = font.stringWidth(line);
+            if (lw + (BUBBLE_PADDING * 2) > bubbleWidth) {
+                bubbleWidth = lw + (BUBBLE_PADDING * 2);
+            }
+        }
+        if (bubbleWidth < 40) {
+            bubbleWidth = 40;
+        }
+        return bubbleWidth;
+    }
+
+    private int drawMessageBubble(Graphics g, ChatMessage m, int y, int screenWidth, Vector lines, int bubbleWidth) {
         int textHeight = lines.size() * font.getHeight();
         int bubbleHeight = textHeight + (BUBBLE_PADDING * 2);
         int labelHeight = (m.sender != null && m.sender.length() > 0) ? font.getHeight() : 0;
         int timeHeight = (m.timestamp != null && m.timestamp.length() > 0) ? font.getHeight() : 0;
-
-        int bubbleWidth = 0;
-        for (int i = 0; i < lines.size(); i++) {
-            String line = (String) lines.elementAt(i);
-            int lw = font.stringWidth(line);
-            if (lw > bubbleWidth) bubbleWidth = lw;
-        }
-        bubbleWidth += (BUBBLE_PADDING * 2);
-        if (bubbleWidth < 40) bubbleWidth = 40;
 
         int x = m.fromMe
                 ? (screenWidth - bubbleWidth - BUBBLE_MARGIN)
@@ -342,15 +389,18 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
             String wordTok = tok;
             int wordWidth = font.stringWidth(wordTok);
             if (wordWidth > maxWidth) {
-                // Break long word character by character.
+                // Break long word character by character (measure accumulated buffer only).
                 for (int j = 0; j < wordTok.length(); j++) {
                     char ch = wordTok.charAt(j);
-                    String test = current.toString() + ch;
-                    if (font.stringWidth(test) > maxWidth && current.length() > 0) {
-                        lines.addElement(current.toString());
-                        current.setLength(0);
-                    }
                     current.append(ch);
+                    if (font.stringWidth(current.toString()) > maxWidth) {
+                        current.setLength(current.length() - 1);
+                        if (current.length() > 0) {
+                            lines.addElement(current.toString());
+                            current.setLength(0);
+                        }
+                        current.append(ch);
+                    }
                 }
                 continue;
             }
@@ -442,6 +492,7 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
         isDragging = false;
         dragStartY = y;
         dragStartScrollOffset = scrollOffset;
+        dragRepaint.reset();
     }
 
     protected void pointerDragged(int x, int y) {
@@ -451,9 +502,10 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
                 isDragging = true;
             }
             if (isDragging) {
+                if (layoutDirty || messagePrefixY == null || messageHeights == null) {
+                    ensureLayout(getWidth() - (BUBBLE_MARGIN * 2));
+                }
                 int h = getHeight();
-                int maxBubbleWidth = getWidth() - (BUBBLE_MARGIN * 2);
-                ensureLayout(maxBubbleWidth);
                 int maxScroll = Math.max(0, totalContentHeight - h);
 
                 int newOffset = dragStartScrollOffset - deltaY;
@@ -461,7 +513,8 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
                 if (newOffset > maxScroll) newOffset = maxScroll;
                 if (newOffset != scrollOffset) {
                     scrollOffset = newOffset;
-                    repaint();
+                    dragRepaint.repaintDrag(this, UiScrollRepaintThrottler.DEFAULT_DRAG_INTERVAL_MS,
+                            0, 0, getWidth(), getHeight());
                 }
             }
         }
@@ -469,11 +522,16 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
     }
 
     protected void pointerReleased(int x, int y) {
+        int rw = getWidth();
+        int rh = getHeight();
         lastPointerY = -1;
         boolean wasDragging = isDragging;
         isDragging = false;
         dragStartY = -1;
         dragStartScrollOffset = 0;
+        if (wasDragging) {
+            dragRepaint.flushRepaint(this, 0, 0, rw, rh);
+        }
         if (wasDragging && scrollOffset == 0 && hasMoreHistory) {
             int h = getHeight();
             int maxBubbleWidth = getWidth() - (BUBBLE_MARGIN * 2);
@@ -548,17 +606,26 @@ public abstract class AbstractChatCanvas extends Canvas implements CommandListen
         if (w <= 0) {
             return;
         }
-        if (!layoutDirty && layoutWidth == w && messageHeights != null && messageHeights.length == messages.size()) {
+        if (!layoutDirty && layoutWidth == w && messageHeights != null && messageHeights.length == messages.size()
+                && messageLines != null && messageLines.length == messages.size()) {
             return;
         }
         layoutWidth = w;
         int count = messages.size();
         messageHeights = new int[count];
+        messageLines = new Vector[count];
+        messageBubbleWidths = new int[count];
+        messagePrefixY = new int[count + 1];
         totalContentHeight = BUBBLE_MARGIN;
+        int innerW = maxBubbleWidth - (BUBBLE_PADDING * 2);
         for (int i = 0; i < count; i++) {
             ChatMessage m = (ChatMessage) messages.elementAt(i);
-            int mh = getMessageHeight(m, maxBubbleWidth);
+            Vector lines = wrapText(m.text, innerW);
+            messageLines[i] = lines;
+            messageBubbleWidths[i] = computeBubbleWidth(lines);
+            int mh = messageHeightFor(m, lines);
             messageHeights[i] = mh;
+            messagePrefixY[i + 1] = messagePrefixY[i] + mh + MESSAGE_SPACING;
             totalContentHeight += mh + MESSAGE_SPACING;
         }
         totalContentHeight += BUBBLE_MARGIN;

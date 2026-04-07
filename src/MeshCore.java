@@ -140,6 +140,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
      * After main menu is shown, we flush one alert per channel/DM.
      */
     private volatile boolean notificationSuppressed = false;
+    /** Outbound sync (CMD sync-next) only after main menu is shown; avoids pull storm on splash. */
+    private volatile boolean messageSyncAllowed = false;
     private final Vector pendingNotificationKeys = new Vector();
     private final Vector pendingNotificationMessages = new Vector();
     /** De-dup: don't show more than one alert per channel/DM while it has unread>0. */
@@ -336,6 +338,13 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         updateMainMenuTitle();
         display.setCurrent(mainMenuScreen);
         startMainMenuNoisePolling();
+        if (connected) {
+            boolean kickSync = !messageSyncAllowed;
+            messageSyncAllowed = true;
+            if (kickSync) {
+                trySyncMessages();
+            }
+        }
     }
 
     /** Set main menu title: when connected rotate with voltage; when disconnected cycle Disconnected/MeshCore. */
@@ -791,6 +800,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         keepAliveRunning = false;
         companionPrefsKnown = false;
         notificationSuppressed = false;
+        messageSyncAllowed = false;
         pendingNotificationKeys.removeAllElements();
         pendingNotificationMessages.removeAllElements();
         alertedNotificationKeys.removeAllElements();
@@ -1329,7 +1339,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     }
 
     public void trySyncMessages() {
-        if (!connected) return;
+        if (!connected || !messageSyncAllowed) return;
         new Thread(new Runnable() {
             public void run() {
                 try {
@@ -1617,6 +1627,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     private void beginNotificationSuppression() {
         notificationSuppressed = true;
+        messageSyncAllowed = false;
         pendingNotificationKeys.removeAllElements();
         pendingNotificationMessages.removeAllElements();
     }
