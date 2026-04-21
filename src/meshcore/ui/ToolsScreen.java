@@ -6,7 +6,7 @@ import javax.microedition.lcdui.Displayable;
 import javax.microedition.lcdui.List;
 
 /**
- * Tools menu: entry point to various tools (e.g. trace path, noise floor).
+ * Tools menu: trace path, noise floor, activity log, etc.
  */
 public final class ToolsScreen extends List implements CommandListener {
 
@@ -15,7 +15,9 @@ public final class ToolsScreen extends List implements CommandListener {
     private final Command cmdBack;
 
     private static final int IDX_TRACE = 0;
-    private static final int IDX_NOISE = 1;
+    private static final int IDX_TRACE_MAP = 1;
+    private static final int IDX_NOISE = 2;
+    private static final int IDX_ACTIVITY_LOG = 3;
 
     public ToolsScreen(AppController app, Displayable returnTo) {
         super("Tools", List.IMPLICIT);
@@ -23,7 +25,9 @@ public final class ToolsScreen extends List implements CommandListener {
         this.returnTo = returnTo;
 
         append("Trace Path \u2022 Manual", null);
+        append("Trace Path \u2022 Using Map", null);
         append("Noise Floor", null);
+        append("Activity Log", null);
 
         cmdBack = new Command("Back", Command.BACK, 1);
         addCommand(cmdBack);
@@ -39,8 +43,12 @@ public final class ToolsScreen extends List implements CommandListener {
             int sel = getSelectedIndex();
             if (sel == IDX_TRACE) {
                 app.getDisplay().setCurrent(new TracePathSelectScreen(app, this));
+            } else if (sel == IDX_TRACE_MAP) {
+                app.getDisplay().setCurrent(new MapViewCanvas(app, this, true));
             } else if (sel == IDX_NOISE) {
                 app.showNoiseFloorScreen(this);
+            } else if (sel == IDX_ACTIVITY_LOG) {
+                app.showActivityLogScreen(this);
             }
         }
     }

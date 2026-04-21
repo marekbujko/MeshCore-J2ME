@@ -10,10 +10,34 @@ public final class UiTimelinePainter {
 
     private UiTimelinePainter() {}
 
+    private static String truncateToMaxWidth(String s, Font f, int maxW) {
+        if (s == null) {
+            s = "";
+        }
+        if (f.stringWidth(s) <= maxW) {
+            return s;
+        }
+        for (int len = s.length() - 1; len >= 2; len--) {
+            String t = s.substring(0, len) + "..";
+            if (f.stringWidth(t) <= maxW) {
+                return t;
+            }
+        }
+        return "..";
+    }
+
     /**
      * Full-width repeater/hop chip: forest panel + mint accent + pale green label (see {@link UiTheme} timeline colors).
      */
     public static int drawNodeBubble(Graphics g, int x, int y, int w, String text) {
+        return drawNodeBubble(g, x, y, w, text, null);
+    }
+
+    /**
+     * Same as {@link #drawNodeBubble(Graphics, int, int, int, String)}; optional {@code rightText} is drawn
+     * right-aligned inside the chip (e.g. hop index). Left label is truncated if needed to avoid overlap.
+     */
+    public static int drawNodeBubble(Graphics g, int x, int y, int w, String text, String rightText) {
         Font f = g.getFont();
         int fh = f.getHeight();
         int pillH = fh + 14;
@@ -31,7 +55,21 @@ public final class UiTimelinePainter {
         String s = text != null ? text : "";
         int ty = y + (pillH - fh) / 2;
         int tx = x + 13;
-        g.drawString(s, tx, ty, Graphics.LEFT | Graphics.TOP);
+        if (rightText != null && rightText.length() > 0) {
+            int rtw = f.stringWidth(rightText);
+            int gap = 6;
+            int rightPad = 8;
+            int leftMax = w - (tx - x) - rtw - gap - rightPad;
+            if (leftMax < 24) {
+                leftMax = 24;
+            }
+            s = truncateToMaxWidth(s, f, leftMax);
+            int rtx = x + w - rightPad - rtw;
+            g.drawString(s, tx, ty, Graphics.LEFT | Graphics.TOP);
+            g.drawString(rightText, rtx, ty, Graphics.LEFT | Graphics.TOP);
+        } else {
+            g.drawString(s, tx, ty, Graphics.LEFT | Graphics.TOP);
+        }
         return pillH + 4;
     }
 
@@ -57,6 +95,37 @@ public final class UiTimelinePainter {
         g.drawLine(cx + 1, yLine + 8, cx + 5, yLine + 4);
 
         return g.getFont().getHeight() + 11;
+    }
+
+    /**
+     * Like {@link #drawSnrArrowDown}, but when {@code distanceLine} is set the text is one compact line:
+     * {@code SNR 11.75 dB \u00B7 706 m} (middle dot; truncated to {@code w} if needed).
+     */
+    public static int drawSnrArrowDownWithDistance(Graphics g, int x, int y, int w, String snr, String distanceLine) {
+        int cx = x + (w / 2);
+        Font f = g.getFont();
+        String snrPart = snr != null ? snr : "n/a";
+        String label;
+        if (distanceLine != null && distanceLine.length() > 0) {
+            label = "SNR " + snrPart + " \u00B7 " + distanceLine;
+        } else {
+            label = "SNR " + snrPart;
+        }
+        label = truncateToMaxWidth(label, f, w - 8);
+        g.setColor(UiTheme.TIMELINE_SNR_TEXT);
+        int tw = f.stringWidth(label);
+        g.drawString(label, cx - (tw / 2), y - 3, Graphics.LEFT | Graphics.TOP);
+
+        int yLine = y + f.getHeight() - 3;
+        g.setColor(UiTheme.TIMELINE_ARROW);
+        g.drawLine(cx, yLine, cx, yLine + 8);
+        g.drawLine(cx + 1, yLine, cx + 1, yLine + 8);
+        g.drawLine(cx, yLine + 8, cx - 4, yLine + 4);
+        g.drawLine(cx, yLine + 8, cx + 4, yLine + 4);
+        g.drawLine(cx + 1, yLine + 8, cx - 3, yLine + 4);
+        g.drawLine(cx + 1, yLine + 8, cx + 5, yLine + 4);
+
+        return f.getHeight() + 11;
     }
 
     /**

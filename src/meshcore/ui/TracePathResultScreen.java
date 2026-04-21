@@ -23,12 +23,14 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
     private final byte[] forwardPath;
     private final Command cmdBack;
     private final Command cmdRefresh;
+    private final Command cmdViewMap;
 
     private int resultPathHops = -1;
     private long resultDurationMs = -1;
 
     private byte[] lastPathSnrs;
     private int lastFinalSNR4;
+    private String resultDestName = "";
 
     private boolean forwardDone = false;
     private boolean waiting = false;
@@ -38,6 +40,27 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
 
     private final UiScrollController scrollCtrl = new UiScrollController();
     private final UiScrollRepaintThrottler scrollDragRepaint = new UiScrollRepaintThrottler();
+
+    /** Lazily rebuilt when width or path changes; avoids redoing string work every paint. */
+    private String[] cachedHopLabels;
+    private String[] cachedHopSnrs;
+    private String[] cachedSegDist;
+    private String cachedFinalSnr;
+    private String cachedTotalDistLine;
+    /** Compact total for header next to hop count (e.g. {@code 1.2 km}, {@code ~850 m}, {@code n/a}). */
+    private String cachedHeaderTotalDist = "";
+    private int cachedContentWidth = -1;
+    private int cachedLayoutHopCount = -2;
+    private int cachedContentHeight;
+    private int cachedMaxW;
+    private int cachedBubbleH;
+    /** SNR row height (single line: SNR + distance; see {@link UiTimelinePainter#drawSnrArrowDownWithDistance}). */
+    private int cachedSnrH;
+    private int cachedTotalDistBandH;
+    private final int[] distScratchA = new int[2];
+    private final int[] distScratchB = new int[2];
+    /** Extra vertical slack so partially visible rows still draw when scrolling. */
+    private static final int VIEWPORT_CULL_MARGIN = 56;
 
     private Font titleFont;
     private Font bodyFont;
@@ -55,8 +78,10 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
 
         cmdBack = new Command("Back", Command.BACK, 1);
         cmdRefresh = new Command("Refresh", Command.SCREEN, 2);
+        cmdViewMap = new Command("View on map", Command.SCREEN, 3);
         addCommand(cmdBack);
         addCommand(cmdRefresh);
+        addCommand(cmdViewMap);
         setCommandListener(this);
 
         renderWaiting();
@@ -72,6 +97,7 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
         timedOut = false;
         waitingDots = 0;
         scrollCtrl.reset();
+        clearTraceLayoutCache();
         waitGeneration++;
         startWaitThreads();
         repaint();
@@ -87,12 +113,199 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
         forwardDone = true;
         waiting = false;
         timedOut = false;
+        resultDestName = (destName != null) ? destName : "";
         lastPathSnrs = pathSnrs;
         lastFinalSNR4 = finalSNR4;
         resultPathHops = pathHops;
         resultDurationMs = durationMs;
         scrollCtrl.reset();
+        clearTraceLayoutCache();
         repaint();
+    }
+
+    private void clearTraceLayoutCache() {
+        cachedHopLabels = null;
+        cachedHopSnrs = null;
+        cachedSegDist = null;
+        cachedFinalSnr = null;
+        cachedTotalDistLine = null;
+        cachedContentWidth = -1;
+        cachedLayoutHopCount = -2;
+        cachedContentHeight = 0;
+        cachedMaxW = 0;
+        cachedBubbleH = 0;
+        cachedSnrH = 0;
+        cachedTotalDistBandH = 0;
+    }
+
+    private static boolean bandIntersectsViewport(int bandTop, int bandBottom, int viewTop, int viewBottom) {
+        int m = VIEWPORT_CULL_MARGIN;
+        return bandBottom >= viewTop - m && bandTop <= viewBottom + m;
+    }
+
+    /**
+     * Precomputes hop labels, SNR strings, and content height (matches {@link UiTimelinePainter} metrics).
+     */
+    private void ensureTraceLayout(int w) {
+        if (!forwardDone) {
+            return;
+        }
+        int hopCount = (forwardPath != null) ? forwardPath.length : 0;
+        int pad = 8;
+        int maxW = w - (pad * 2) - 6;
+        if (cachedContentWidth == w && cachedLayoutHopCount == hopCount
+                && cachedHopLabels != null && cachedHopLabels.length == hopCount
+                && cachedSegDist != null && cachedSegDist.length == hopCount + 1) {
+            return;
+        }
+        ensureFonts();
+        int fh = bodyFont.getHeight();
+        int sfh = smallFont.getHeight();
+        int bubbleH = fh + 14 + 4;
+        int snrBandH = fh + 11;
+
+        cachedContentWidth = w;
+        cachedLayoutHopCount = hopCount;
+        cachedMaxW = maxW;
+        cachedBubbleH = bubbleH;
+        cachedSnrH = snrBandH;
+
+        cachedHopLabels = new String[hopCount];
+        cachedHopSnrs = new String[hopCount];
+        for (int i = 0; i < hopCount; i++) {
+            cachedHopLabels[i] = getRepeaterLabel(i);
+            cachedHopSnrs[i] = getHopSnr(i);
+        }
+        cachedFinalSnr = formatSnr4ToDb(lastFinalSNR4);
+
+        buildSegmentDistanceStrings(hopCount);
+        cachedTotalDistBandH = sfh + 10;
+
+        cachedContentHeight = 10 + (hopCount + 2) * bubbleH + (hopCount + 1) * snrBandH
+                + cachedTotalDistBandH + 16 + pad;
+    }
+
+    private static int approxDistanceMeters(int lat1E6, int lon1E6, int lat2E6, int lon2E6) {
+        double lat1 = lat1E6 / 1000000.0;
+        double lon1 = lon1E6 / 1000000.0;
+        double lat2 = lat2E6 / 1000000.0;
+        double lon2 = lon2E6 / 1000000.0;
+        double meanLat = (lat1 + lat2) * 0.5 * 3.141592653589793 / 180.0;
+        double dx = (lon2 - lon1) * 111320.0 * Math.cos(meanLat);
+        double dy = (lat2 - lat1) * 110540.0;
+        return (int) Math.sqrt(dx * dx + dy * dy);
+    }
+
+    private static String formatDistanceShort(int meters) {
+        if (meters < 0) {
+            meters = 0;
+        }
+        if (meters < 1000) {
+            return Integer.toString(meters) + " m";
+        }
+        int km10 = (meters + 50) / 100;
+        int km = km10 / 10;
+        int d = km10 % 10;
+        return Integer.toString(km) + "." + Integer.toString(d) + " km";
+    }
+
+    private boolean latLonForPathHop(int hopIndex, int[] outLatLonE6) {
+        if (forwardPath == null || hopIndex < 0 || hopIndex >= forwardPath.length) {
+            return false;
+        }
+        int cidx = app.getRepeaterContactIndexForPathByte(forwardPath[hopIndex]);
+        if (cidx < 0) {
+            return false;
+        }
+        int la = app.getContactAdvLatE6(cidx);
+        int lo = app.getContactAdvLonE6(cidx);
+        if (la == Integer.MIN_VALUE || lo == Integer.MIN_VALUE) {
+            return false;
+        }
+        outLatLonE6[0] = la;
+        outLatLonE6[1] = lo;
+        return true;
+    }
+
+    private void buildSegmentDistanceStrings(int hopCount) {
+        cachedSegDist = new String[hopCount + 1];
+        if (hopCount <= 0) {
+            int nLa = app.getNodeAdvLatE6();
+            int nLo = app.getNodeAdvLonE6();
+            if (nLa != Integer.MIN_VALUE && nLo != Integer.MIN_VALUE) {
+                cachedSegDist[0] = "0 m";
+                cachedTotalDistLine = "Total Path Distance: 0 m";
+                cachedHeaderTotalDist = "0 m";
+            } else {
+                cachedSegDist[0] = "n/a";
+                cachedTotalDistLine = "Total Path Distance: unknown";
+                cachedHeaderTotalDist = "n/a";
+            }
+            return;
+        }
+
+        int nLa = app.getNodeAdvLatE6();
+        int nLo = app.getNodeAdvLonE6();
+        boolean nodeOk = nLa != Integer.MIN_VALUE && nLo != Integer.MIN_VALUE;
+
+        int totalM = 0;
+        boolean anyOk = false;
+        boolean anyMissing = false;
+
+        for (int leg = 0; leg <= hopCount; leg++) {
+            boolean okA;
+            boolean okB;
+            int aLa;
+            int aLo;
+            int bLa;
+            int bLo;
+
+            if (leg == 0) {
+                okA = nodeOk;
+                aLa = nLa;
+                aLo = nLo;
+                okB = latLonForPathHop(0, distScratchB);
+                bLa = distScratchB[0];
+                bLo = distScratchB[1];
+            } else if (leg < hopCount) {
+                okA = latLonForPathHop(leg - 1, distScratchA);
+                aLa = distScratchA[0];
+                aLo = distScratchA[1];
+                okB = latLonForPathHop(leg, distScratchB);
+                bLa = distScratchB[0];
+                bLo = distScratchB[1];
+            } else {
+                okA = latLonForPathHop(hopCount - 1, distScratchA);
+                aLa = distScratchA[0];
+                aLo = distScratchA[1];
+                okB = nodeOk;
+                bLa = nLa;
+                bLo = nLo;
+            }
+
+            if (!okA || !okB) {
+                cachedSegDist[leg] = "n/a";
+                anyMissing = true;
+            } else {
+                int m = approxDistanceMeters(aLa, aLo, bLa, bLo);
+                cachedSegDist[leg] = formatDistanceShort(m);
+                totalM += m;
+                anyOk = true;
+            }
+        }
+
+        if (!anyOk) {
+            cachedTotalDistLine = "Total Path Distance: unknown";
+            cachedHeaderTotalDist = "n/a";
+        } else if (anyMissing) {
+            String part = formatDistanceShort(totalM);
+            cachedTotalDistLine = "Total Path Distance: ~" + part + " (partial)";
+            cachedHeaderTotalDist = "~" + part;
+        } else {
+            String tot = formatDistanceShort(totalM);
+            cachedTotalDistLine = "Total Path Distance: " + tot;
+            cachedHeaderTotalDist = tot;
+        }
     }
 
     private String getRepeaterLabel(int i) {
@@ -149,7 +362,11 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
         if (resultPathHops < 0) {
             return "";
         }
-        return "Path Hops: " + resultPathHops;
+        String hops = resultPathHops == 1 ? "1 hop" : (resultPathHops + " hops");
+        if (cachedHeaderTotalDist == null || cachedHeaderTotalDist.length() == 0) {
+            return hops;
+        }
+        return cachedHeaderTotalDist + " \u00B7 " + hops;
     }
 
     private String traceHeaderRight() {
@@ -162,6 +379,7 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
     private int measureTraceHeaderBar(int w) {
         ensureFonts();
         if (forwardDone) {
+            ensureTraceLayout(w);
             return UiScreenHeader.measureHeightPrimarySubLeftRight(w, "",
                     traceHeaderLeft(), traceHeaderRight(), titleFont, smallFont);
         }
@@ -204,12 +422,6 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
             return;
         }
 
-        headerBarH = measureTraceHeaderBar(w);
-        viewportH = h - headerBarH;
-        if (viewportH < 1) {
-            viewportH = 1;
-        }
-
         g.setColor(UiTheme.PANEL_BG);
         g.fillRect(0, 0, w, h);
 
@@ -217,29 +429,81 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
         g.clipRect(0, headerBarH, w, viewportH);
         int y = headerBarH - scrollY + 10;
 
+        int contentHeight = viewportH;
+
         if (!forwardDone && timedOut) {
             y = drawMessageSection(g, x, y, maxW, "No reply (timeout). Press Refresh to try again.");
+            y += 16;
+            contentHeight = y - headerBarH + scrollY + pad;
+            if (contentHeight < viewportH) {
+                contentHeight = viewportH;
+            }
         } else if (forwardDone) {
+            ensureTraceLayout(w);
+            int viewTop = headerBarH;
+            int viewBottom = headerBarH + viewportH;
+            int mw = cachedMaxW > 0 ? cachedMaxW : maxW;
+            int bubbleH = cachedBubbleH;
+            int snrH = cachedSnrH;
+            int hopCount = (forwardPath != null) ? forwardPath.length : 0;
+
             g.setFont(bodyFont);
             String myNodeLabel = UiCanvasUtil.getNodeLabel(app);
-            y += UiTimelinePainter.drawNodeBubble(g, x, y, maxW, myNodeLabel);
 
-            int hopCount = (forwardPath != null) ? forwardPath.length : 0;
+            int bandTop = y;
+            int bandBottom = y + bubbleH;
+            if (bandIntersectsViewport(bandTop, bandBottom, viewTop, viewBottom)) {
+                UiTimelinePainter.drawNodeBubble(g, x, y, mw, myNodeLabel);
+            }
+            y = bandBottom;
+
             for (int i = 0; i < hopCount; i++) {
-                y += UiTimelinePainter.drawSnrArrowDown(g, x, y, maxW, getHopSnr(i));
-                y += UiTimelinePainter.drawNodeBubble(g, x, y, maxW, getRepeaterLabel(i));
+                bandTop = y;
+                bandBottom = y + snrH;
+                if (bandIntersectsViewport(bandTop, bandBottom, viewTop, viewBottom)) {
+                    UiTimelinePainter.drawSnrArrowDownWithDistance(g, x, y, mw,
+                            cachedHopSnrs[i], cachedSegDist[i]);
+                }
+                y = bandBottom;
+                bandTop = y;
+                bandBottom = y + bubbleH;
+                if (bandIntersectsViewport(bandTop, bandBottom, viewTop, viewBottom)) {
+                    UiTimelinePainter.drawNodeBubble(g, x, y, mw, cachedHopLabels[i], String.valueOf(i + 1));
+                }
+                y = bandBottom;
             }
 
-            String finalSnr = formatSnr4ToDb(lastFinalSNR4);
-            y += UiTimelinePainter.drawSnrArrowDown(g, x, y, maxW, finalSnr);
-            y += UiTimelinePainter.drawNodeBubble(g, x, y, maxW, myNodeLabel);
+            bandTop = y;
+            bandBottom = y + snrH;
+            if (bandIntersectsViewport(bandTop, bandBottom, viewTop, viewBottom)) {
+                UiTimelinePainter.drawSnrArrowDownWithDistance(g, x, y, mw,
+                        cachedFinalSnr, cachedSegDist[hopCount]);
+            }
+            y = bandBottom;
+            bandTop = y;
+            bandBottom = y + bubbleH;
+            if (bandIntersectsViewport(bandTop, bandBottom, viewTop, viewBottom)) {
+                UiTimelinePainter.drawNodeBubble(g, x, y, mw, myNodeLabel);
+            }
+            y = bandBottom;
+
+            bandTop = y;
+            bandBottom = y + cachedTotalDistBandH;
+            if (cachedTotalDistLine != null
+                    && bandIntersectsViewport(bandTop, bandBottom, viewTop, viewBottom)) {
+                g.setFont(smallFont);
+                g.setColor(UiTheme.TEXT_DARK);
+                int tw = smallFont.stringWidth(cachedTotalDistLine);
+                g.drawString(cachedTotalDistLine, x + (mw - tw) / 2, y + 2, Graphics.LEFT | Graphics.TOP);
+            }
+            y += cachedTotalDistBandH;
+
+            contentHeight = cachedContentHeight;
+            if (contentHeight < viewportH) {
+                contentHeight = viewportH;
+            }
         }
 
-        y += 16;
-        int contentHeight = y - headerBarH + scrollY + pad;
-        if (contentHeight < viewportH) {
-            contentHeight = viewportH;
-        }
         scrollCtrl.setContentHeight(contentHeight);
         scrollCtrl.clamp(viewportH);
 
@@ -314,6 +578,14 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
         }
         if (c == cmdRefresh && forwardPath != null && forwardPath.length > 0) {
             app.tracePathManualRefresh(forwardPath, this);
+            return;
+        }
+        if (c == cmdViewMap) {
+            if (!forwardDone || forwardPath == null || forwardPath.length == 0) {
+                Alerts.warning(app.getDisplay(), this, "Map", "Run trace first.", 2000);
+                return;
+            }
+            app.showMapViewTracePath(forwardPath, lastPathSnrs, lastFinalSNR4, resultDestName, this);
         }
     }
 
@@ -330,6 +602,28 @@ public final class TracePathResultScreen extends Canvas implements CommandListen
             vh = 1;
         }
         int action = getGameAction(keyCode);
+        int step = UiScrollController.computeStep(bodyFont);
+        if (scrollCtrl.onKey(action, step, vh)) {
+            repaint();
+        }
+    }
+
+    protected void keyRepeated(int keyCode) {
+        if (!forwardDone) {
+            return;
+        }
+        ensureFonts();
+        int w = getWidth();
+        int h = getHeight();
+        int hh = measureTraceHeaderBar(w);
+        int vh = h - hh;
+        if (vh < 1) {
+            vh = 1;
+        }
+        int action = getGameAction(keyCode);
+        if (action != UP && action != DOWN) {
+            return;
+        }
         int step = UiScrollController.computeStep(bodyFont);
         if (scrollCtrl.onKey(action, step, vh)) {
             repaint();

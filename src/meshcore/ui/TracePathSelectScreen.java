@@ -35,7 +35,7 @@ public final class TracePathSelectScreen extends List implements CommandListener
         this.returnTo = returnTo;
 
         cmdBack = new Command("Back", Command.BACK, 1);
-        cmdSamePath = new Command("Run Trace", Command.OK, 1);
+        cmdSamePath = new Command("Run Trace", Command.SCREEN, 1);
         cmdAddHop = new Command("Add Repeater", Command.SCREEN, 2);
         cmdRemoveLast = new Command("Remove Repeater", Command.SCREEN, 3);
         cmdAutoReturnPath = new Command("Auto Return Path", Command.SCREEN, 4);

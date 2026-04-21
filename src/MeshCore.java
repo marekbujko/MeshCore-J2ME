@@ -24,6 +24,7 @@ import meshcore.util.ParseUtils;
 import meshcore.util.SHA256;
 import meshcore.util.TextUtils;
 import meshcore.ui.ToolsScreen;
+import meshcore.ui.MapViewOpener;
 import meshcore.ui.AppController;
 import meshcore.ui.ActivityLogScreen;
 import meshcore.ui.ChannelListScreen;
@@ -62,7 +63,7 @@ import meshcore.util.RepeaterPasswordStore;
  *
  * Screens:
  *   1. ConnectScreen    - IP/port entry
- *   2. MainMenu         - Channels / Contacts / Repeaters / Activity Log / Settings / Disconnect
+ *   2. MainMenu         - Channels / Contacts / Repeaters / More (Tools incl. Activity Log) / Disconnect
  *   3. ChannelListScreen- Channel list selector
  *   4. ChannelScreen    - Public broadcast chat
  *   5. ContactsScreen   - Contact list (non-repeaters), tap to open DM
@@ -112,6 +113,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     // Screen references (for UI updates from background threads)
     private ConnectScreen connectScreen;
+    /** Decoded once to avoid repeated native image decode OOM on low-memory devices. */
+    private Image splashLogo;
     private MainMenuScreen mainMenuScreen;
     private ChannelListScreen channelListScreen;
     private ChannelScreen channelScreen;
@@ -293,15 +296,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     private void showSplashScreen() {
         connectScreen = new ConnectScreen(this);
-        Image logo = null;
-        try {
-            logo = Image.createImage("/logo.png");
-        } catch (IOException ignore) {
-            try {
-                logo = Image.createImage("/logo.jpg");
-            } catch (IOException ignore2) {}
-        }
-        display.setCurrent(ImageUtils.createSplashCanvas(logo));
+        display.setCurrent(ImageUtils.createSplashCanvas(getSplashLogo()));
         new Thread(new Runnable() {
             public void run() {
                 try { Thread.sleep(AppConstants.SPLASH_DELAY_MS); } catch (InterruptedException ignore) {}
@@ -312,6 +307,22 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 });
             }
         }).start();
+    }
+
+    private Image getSplashLogo() {
+        if (splashLogo != null) {
+            return splashLogo;
+        }
+        try {
+            splashLogo = Image.createImage("/logo.png");
+        } catch (Throwable ignore) {
+            try {
+                splashLogo = Image.createImage("/logo.jpg");
+            } catch (Throwable ignore2) {
+                splashLogo = null;
+            }
+        }
+        return splashLogo;
     }
 
     private void initChannels() {
@@ -595,8 +606,8 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         display.setCurrent(ms);
     }
 
-    public void showActivityLogScreen() {
-        activityLogScreen = new ActivityLogScreen(this, activityLogBuf);
+    public void showActivityLogScreen(Displayable returnTo) {
+        activityLogScreen = new ActivityLogScreen(this, activityLogBuf, returnTo);
         display.setCurrent(activityLogScreen);
     }
 
@@ -607,6 +618,23 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
     public void showToolsScreen(Displayable returnTo) {
         toolsScreen = new ToolsScreen(this, returnTo);
         display.setCurrent(toolsScreen);
+    }
+
+    public void showMapView(Displayable returnTo) {
+        display.setCurrent(MapViewOpener.createMapView(this, returnTo));
+    }
+
+    public void showMapViewForContact(int contactIdx, Displayable returnTo) {
+        String name = getContactName(contactIdx);
+        display.setCurrent(MapViewOpener.createMapViewForContact(this, returnTo, contactIdx, name));
+    }
+
+    public void showMapViewTracePath(byte[] forwardPath, byte[] pathSnrs, int finalSnr4, String destLabel, Displayable returnTo) {
+        if (forwardPath == null || forwardPath.length == 0) {
+            return;
+        }
+        String label = (destLabel != null) ? destLabel : "";
+        display.setCurrent(MapViewOpener.createMapViewTracePath(this, returnTo, forwardPath, pathSnrs, finalSnr4, label));
     }
 
     public void showNoiseFloorScreen(Displayable returnTo) {
@@ -677,26 +705,21 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                 }
             });
         } catch (Exception e) {
-            setConnectTitle("Failed: " + e.getMessage());
-            appendActivityLog("[!] Connect failed: " + e.getMessage());
+            String err = formatConnectError(e);
+            setConnectTitle("Failed: " + err);
+            appendActivityLog("[!] Connect failed: " + err);
             connected = false;
             notificationSuppressed = false;
             pendingNotificationKeys.removeAllElements();
             pendingNotificationMessages.removeAllElements();
             alertedNotificationKeys.removeAllElements();
+            Alerts.ok(display, connectScreen, "Connect failed", err);
         }
     }
 
     public void connectWithSplash(final String host, final int port) {
         beginNotificationSuppression();
-        Image logo = null;
-        try {
-            logo = Image.createImage("/logo.png");
-        } catch (IOException ignore) {
-            try {
-                logo = Image.createImage("/logo.jpg");
-            } catch (IOException ignore2) {}
-        }
+        Image logo = getSplashLogo();
         final String[] status = new String[]{"Connecting..."};
         final Canvas splash = ImageUtils.createStatusSplashCanvas(logo, status);
         display.setCurrent(splash);
@@ -724,7 +747,7 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                         }
                     });
                 } catch (Exception e) {
-                    final String err = e.getMessage();
+                    final String err = formatConnectError(e);
                     appendActivityLog("[!] Connect failed: " + err);
                     connected = false;
                     notificationSuppressed = false;
@@ -735,12 +758,32 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
                     connectScreen.setTitle("Failed: " + err);
                     display.callSerially(new Runnable() {
                         public void run() {
-                            display.setCurrent(connectScreen);
+                            Alerts.ok(display, connectScreen, "Connect failed", err);
                         }
                     });
                 }
             }
         }).start();
+    }
+
+    private static String formatConnectError(Throwable t) {
+        if (t == null) {
+            return "unknown";
+        }
+        String msg = t.getMessage();
+        String cls = t.getClass().getName();
+        if (cls != null) {
+            int p = cls.lastIndexOf('.');
+            if (p >= 0 && p + 1 < cls.length()) {
+                cls = cls.substring(p + 1);
+            }
+        } else {
+            cls = "Exception";
+        }
+        if (msg == null || msg.length() == 0) {
+            return cls;
+        }
+        return cls + ": " + msg;
     }
 
     /** Common initialization sequence after TCP socket + transport are created. */
@@ -812,6 +855,17 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
 
     public void disconnect() {
         resetConnectionFlags(true);
+    }
+
+    public void exitApp() {
+        running = false;
+        reconnectScheduled = false;
+        userRequestedDisconnect = true;
+        disconnect();
+        try {
+            notifyDestroyed();
+        } catch (Throwable t) {
+        }
     }
 
     private void onConnectionLost() {
@@ -1544,6 +1598,25 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
         return contactStore.getLastAdvert(contactIdx);
     }
 
+    public int getContactCount() {
+        return contactStore.size();
+    }
+
+    public String getContactName(int contactIdx) {
+        if (contactIdx < 0 || contactIdx >= contactStore.size()) {
+            return "";
+        }
+        String n = contactStore.getName(contactIdx);
+        return n != null ? n : "";
+    }
+
+    public int getContactAdvertType(int contactIdx) {
+        if (contactIdx < 0 || contactIdx >= contactStore.size()) {
+            return ProtocolConstants.ADV_TYPE_NONE;
+        }
+        return contactStore.getType(contactIdx);
+    }
+
     public int getContactAdvLatE6(int contactIdx) {
         return contactStore.getAdvLatE6(contactIdx);
     }
@@ -1572,6 +1645,19 @@ public class MeshCore extends MIDlet implements AppController, FrameHandlerListe
             }
         }
         return null;
+    }
+
+    public int getRepeaterContactIndexForPathByte(byte pathByte) {
+        int n = contactStore.size();
+        for (int i = 0; i < n; i++) {
+            if (contactStore.getType(i) != ProtocolConstants.ADV_TYPE_REPEATER) {
+                continue;
+            }
+            if (getRepeaterPathByte(i) == pathByte) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     public Vector getRepeaterIndices() {

@@ -1014,7 +1014,7 @@ public final class SettingsScreen extends Canvas implements CommandListener {
             if (settingsReturnTo != null) {
                 app.getDisplay().setCurrent(settingsReturnTo);
             } else {
-                app.showMainMenu();
+            app.showMainMenu();
             }
             return;
         }

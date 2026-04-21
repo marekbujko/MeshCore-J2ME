@@ -32,7 +32,7 @@ public interface AppController {
     void returnToSettingsScreen();
     void showDeviceInfoScreen(Displayable returnTo);
     void notifyDeviceInfoClosed();
-    void showActivityLogScreen();
+    void showActivityLogScreen(Displayable returnTo);
 
     void showMessageSettingsScreen();
 
@@ -111,6 +111,10 @@ public interface AppController {
     void showNoiseFloorScreen(Displayable returnTo);
     /** Show Tools screen (so app can refresh noise when stats arrive). */
     void showToolsScreen(Displayable returnTo);
+    /** Offline / online map tiles (SD card or HTTP). */
+    void showMapView(Displayable returnTo);
+    /** Open map centered for a specific contact/repeater with distance overlay. */
+    void showMapViewForContact(int contactIdx, Displayable returnTo);
 
     void appendChannel(int channelIndex, String line);
     void appendActivityLog(String line);
@@ -121,12 +125,23 @@ public interface AppController {
     int getContactPathHops(int contactIdx);
     byte[] getContactPathBytes(int contactIdx);
     long getContactLastAdvertSecs(int contactIdx);
+    int getContactCount();
+    String getContactName(int contactIdx);
+    int getContactAdvertType(int contactIdx);
     int getContactAdvLatE6(int contactIdx);
     int getContactAdvLonE6(int contactIdx);
     int getNodeAdvLatE6();
     int getNodeAdvLonE6();
     String getRepeaterNameForPathByte(byte pathByte);
+    /** Contact index for repeater with this path byte, or -1. */
+    int getRepeaterContactIndexForPathByte(byte pathByte);
     java.util.Vector getRepeaterIndices();
     byte getRepeaterPathByte(int contactIdx);
     String getRepeaterPublicKeyHex(int contactIdx);
+
+    /** Map with TRACE path polyline and SNR summary (forward + return from firmware). */
+    void showMapViewTracePath(byte[] forwardPath, byte[] pathSnrs, int finalSnr4, String destLabel, Displayable returnTo);
+
+    /** User chose Exit from More menu; terminate the MIDlet. */
+    void exitApp();
 }

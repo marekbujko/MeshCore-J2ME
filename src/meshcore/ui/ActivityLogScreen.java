@@ -15,15 +15,17 @@ public class ActivityLogScreen extends Canvas implements CommandListener {
 
     private final AppController app;
     private final StringBuffer logBuf;
+    private final Displayable returnTo;
     private final Command cmdBack;
     private Font font;
     private String[] lines = new String[0];
     private int totalHeight = 0;
     private int scrollOffset = 0;
 
-    public ActivityLogScreen(AppController app, StringBuffer logBuf) {
+    public ActivityLogScreen(AppController app, StringBuffer logBuf, Displayable returnTo) {
         this.app = app;
         this.logBuf = logBuf;
+        this.returnTo = returnTo;
         setTitle("Activity Log");
         cmdBack = new Command("Back", Command.BACK, 1);
         addCommand(cmdBack);
@@ -134,7 +136,11 @@ public class ActivityLogScreen extends Canvas implements CommandListener {
 
     public void commandAction(Command c, Displayable d) {
         if (c == cmdBack) {
-            app.showMainMenu();
+            if (returnTo != null) {
+                app.getDisplay().setCurrent(returnTo);
+            } else {
+                app.showMainMenu();
+            }
         }
     }
 }

@@ -40,6 +40,9 @@ public final class ImageUtils {
     public static Canvas createStatusSplashCanvas(final Image logo, final String[] statusHolder) {
         final int bgColor = logo != null ? getBackgroundColor(logo) : 0x191F2D;
         return new Canvas() {
+            private Image scaledLogo;
+            private int scaledW = -1;
+            private int scaledH = -1;
             {
                 setFullScreenMode(true);
             }
@@ -55,10 +58,14 @@ public final class ImageUtils {
                     int dw = w;
                     int dh = h - 30;
                     if (lw > 0 && lh > 0 && dw > 0 && dh > 0) {
-                        Image scaled = scaleImageToFit(logo, dw, dh);
-                        int x = (w - scaled.getWidth()) / 2;
-                        int y = (dh - scaled.getHeight()) / 2;
-                        g.drawImage(scaled, x, y, Graphics.TOP | Graphics.LEFT);
+                        if (scaledLogo == null || scaledW != dw || scaledH != dh) {
+                            scaledLogo = scaleImageToFit(logo, dw, dh);
+                            scaledW = dw;
+                            scaledH = dh;
+                        }
+                        int x = (w - scaledLogo.getWidth()) / 2;
+                        int y = (dh - scaledLogo.getHeight()) / 2;
+                        g.drawImage(scaledLogo, x, y, Graphics.TOP | Graphics.LEFT);
                     }
                 }
                 g.setColor(bgColor);

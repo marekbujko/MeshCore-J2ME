@@ -10,6 +10,11 @@ import meshcore.protocol.ProtocolConstants;
  * Types 0–3 match classic LPP; types 100+ are the extended set used on the wire
  * for illuminance, temperature, voltage (116 / 0x74), GPS (136), etc.
  * Classic myDevices types 4–18 are still decoded for older/other senders.
+ * <p>
+ * MeshCore may send two {@code LPP_TEMPERATURE} (103) values on {@link ProtocolConstants#TELEM_CHANNEL_SELF}:
+ * typical companion flow runs {@code querySensors} (environmental temp first), then appends MCU die temperature.
+ * When two 103 fields exist on channel 1, the first is labeled {@code Temperature} and the second
+ * {@code CPU Temperature}.
  */
 public final class CayenneLppDecoder {
 
@@ -30,6 +35,10 @@ public final class CayenneLppDecoder {
             return null;
         }
         StringBuffer sb = new StringBuffer();
+        int totalSelf103 = countLppFieldsOnChannelWithType(data, ProtocolConstants.TELEM_CHANNEL_SELF, 103);
+        int totalSelfClassic6 = countLppFieldsOnChannelWithType(data, ProtocolConstants.TELEM_CHANNEL_SELF, 6);
+        final int[] idxSelf103 = new int[]{0};
+        final int[] idxSelfClassic6 = new int[]{0};
         int i = 0;
         int n = data.length;
         while (i + 2 <= n) {
@@ -59,7 +68,7 @@ public final class CayenneLppDecoder {
                 }
                 return sb.toString();
             }
-            String line = decodeOne(ch, type, data, i);
+            String line = decodeOne(ch, type, data, i, totalSelf103, idxSelf103, totalSelfClassic6, idxSelfClassic6);
             i += need;
             if (channelFilter < 0 || ch == channelFilter) {
                 if (sb.length() > 0) {
@@ -82,6 +91,28 @@ public final class CayenneLppDecoder {
             sb.append("(no data on channel ").append(channelFilter).append(')');
         }
         return sb.toString();
+    }
+
+    /**
+     * Counts complete LPP fields matching channel and type (for disambiguating duplicate types on one channel).
+     */
+    private static int countLppFieldsOnChannelWithType(byte[] data, int wantCh, int wantType) {
+        int count = 0;
+        int i = 0;
+        int n = data.length;
+        while (i + 2 <= n) {
+            int ch = data[i++] & 0xFF;
+            int type = data[i++] & 0xFF;
+            int need = valueSize(type);
+            if (need < 0 || i + need > n) {
+                return count;
+            }
+            if (ch == wantCh && type == wantType) {
+                count++;
+            }
+            i += need;
+        }
+        return count;
     }
 
     private static int valueSize(int type) {
@@ -167,14 +198,23 @@ public final class CayenneLppDecoder {
         }
     }
 
-    private static String decodeOne(int ch, int type, byte[] b, int o) {
+    private static String decodeOne(
+            int ch,
+            int type,
+            byte[] b,
+            int o,
+            int totalSelf103,
+            int[] idxSelf103,
+            int totalSelfClassic6,
+            int[] idxSelfClassic6
+    ) {
         if (isPycayenneExtended(type)) {
-            return decodePycayenne(ch, type, b, o);
+            return decodePycayenne(ch, type, b, o, totalSelf103, idxSelf103);
         }
-        return decodeClassic(ch, type, b, o);
+        return decodeClassic(ch, type, b, o, totalSelfClassic6, idxSelfClassic6);
     }
 
-    private static String decodePycayenne(int ch, int type, byte[] b, int o) {
+    private static String decodePycayenne(int ch, int type, byte[] b, int o, int totalSelf103, int[] idxSelf103) {
         StringBuffer s = new StringBuffer();
         s.append("Ch ").append(ch).append(": ");
         switch (type) {
@@ -193,7 +233,8 @@ public final class CayenneLppDecoder {
                 break;
             case 103: {
                 int v = readSignedBE(b, o, 2);
-                s.append("Temperature ").append(fix1Signed(v, 10)).append(" C");
+                s.append(selfChannel103Label(ch, totalSelf103, idxSelf103));
+                s.append(fix1Signed(v, 10)).append(" C");
                 break;
             }
             case 104: {
@@ -377,7 +418,37 @@ public final class CayenneLppDecoder {
         return whole + "." + f;
     }
 
-    private static String decodeClassic(int ch, int type, byte[] b, int o) {
+    /**
+     * Label for extended LPP temperature (103) on TELEM_CHANNEL_SELF: first = env, second = MCU when both exist.
+     */
+    private static String selfChannel103Label(int ch, int totalSelf103, int[] idxSelf103) {
+        if (ch != ProtocolConstants.TELEM_CHANNEL_SELF) {
+            return "Temperature ";
+        }
+        idxSelf103[0]++;
+        int occ = idxSelf103[0];
+        if (totalSelf103 >= 2 && occ == 2) {
+            return "CPU Temperature ";
+        }
+        return "Temperature ";
+    }
+
+    /**
+     * Same disambiguation for classic LPP temperature (type 6) if two appear on channel 1.
+     */
+    private static String selfChannelClassic6Label(int ch, int totalSelfClassic6, int[] idxSelfClassic6) {
+        if (ch != ProtocolConstants.TELEM_CHANNEL_SELF) {
+            return "Temperature (classic) ";
+        }
+        idxSelfClassic6[0]++;
+        int occ = idxSelfClassic6[0];
+        if (totalSelfClassic6 >= 2 && occ == 2) {
+            return "CPU Temperature (classic) ";
+        }
+        return "Temperature (classic) ";
+    }
+
+    private static String decodeClassic(int ch, int type, byte[] b, int o, int totalSelfClassic6, int[] idxSelfClassic6) {
         StringBuffer s = new StringBuffer();
         s.append("Ch ").append(ch).append(": ");
         switch (type) {
@@ -407,7 +478,8 @@ public final class CayenneLppDecoder {
                 break;
             case 6: {
                 int v = readInt16BE(b, o);
-                s.append("Temperature (classic) ").append(fix1Signed(v, 10)).append(" C");
+                s.append(selfChannelClassic6Label(ch, totalSelfClassic6, idxSelfClassic6));
+                s.append(fix1Signed(v, 10)).append(" C");
                 break;
             }
             case 7: {

@@ -46,7 +46,6 @@ public class MainMenuScreen extends Canvas implements CommandListener {
     private final Command cmdSelect;
     private final Command cmdAdvertZeroHop;
     private final Command cmdAdvertFloodRouted;
-    private final Command cmdActivityLog;
     private final Command cmdDisconnect;
     private final Command cmdConnectTo;
     private final Command cmdMore;
@@ -96,14 +95,12 @@ public class MainMenuScreen extends Canvas implements CommandListener {
         cmdSelect = new Command("Select", Command.OK, 0);
         cmdAdvertZeroHop = new Command("Advert \u2022 Zero Hop", Command.SCREEN, 1);
         cmdAdvertFloodRouted = new Command("Advert \u2022 Flood", Command.SCREEN, 2);
-        cmdActivityLog = new Command("Activity Log", Command.SCREEN, 3);
-        cmdDisconnect = new Command("Disconnect", Command.SCREEN, 4);
-        cmdConnectTo = new Command("Connect To", Command.SCREEN, 4);
-        cmdMore = new Command("More", Command.BACK, 5);
+        cmdDisconnect = new Command("Disconnect", Command.SCREEN, 3);
+        cmdConnectTo = new Command("Connect To", Command.SCREEN, 3);
+        cmdMore = new Command("More", Command.BACK, 4);
         addCommand(cmdSelect);
         addCommand(cmdAdvertZeroHop);
         addCommand(cmdAdvertFloodRouted);
-        addCommand(cmdActivityLog);
         addCommand(cmdDisconnect);
         addCommand(cmdMore);
         setCommandListener(this);
@@ -439,17 +436,13 @@ public class MainMenuScreen extends Canvas implements CommandListener {
             showAdvertConfirm("Flood Routed", ProtocolConstants.ADVERT_FLOOD);
             return;
         }
-        if (c == cmdActivityLog) {
-            app.showActivityLogScreen();
-            return;
-        }
         if (c == cmdDisconnect || c == cmdConnectTo) {
             app.disconnect();
             app.showConnectScreen();
             return;
         }
         if (c == cmdMore) {
-            app.getDisplay().setCurrent(new MoreMenuScreen(app, this));
+            app.getDisplay().setCurrent(new MoreMenuCanvas(app, this));
             return;
         }
     }

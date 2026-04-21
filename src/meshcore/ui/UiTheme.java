@@ -43,5 +43,12 @@ public final class UiTheme {
     // Scroll bar.
     public static final int SCROLL_BAR_BG = 0xBBBBBB;
     public static final int SCROLL_BAR_THUMB = 0x666666;
+
+    /**
+     * Map viewer with no tile URL: soft mint fill (same family as selected tiles / 0xD4EDE0 on main menu).
+     */
+    public static final int MAP_EMPTY_BG = 0xE6F3EC;
+    /** Grid lines on empty map (subtle, readable on {@link #MAP_EMPTY_BG}). */
+    public static final int MAP_EMPTY_GRID = 0xB8D8C4;
 }
 
