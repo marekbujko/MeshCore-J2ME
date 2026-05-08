@@ -49,7 +49,7 @@ public final class AboutScreen extends Form implements CommandListener {
         if (vendor.length() > 0) {
             append("Author: " + vendor + "\n");
         }
-        append("Github: https://github.com/dobrishinov\n");
+        append("Github: https://github.com/dobrishinov/MeshCore-J2ME\n");
 
         cmdBack = new Command("Back", Command.BACK, 1);
         addCommand(cmdBack);
