@@ -1,8 +1,18 @@
-# MeshCoreTest
+# MeshCore J2ME Client
 
-MeshCoreTest is a Java ME (MIDP 2.0 / CLDC 1.1) mobile client for MeshCore Companion Radio over Wi-Fi TCP.
+MeshCore Java ME (MIDP 2.0 / CLDC 1.1) mobile client for MeshCore Companion Radio over Wi-Fi TCP.
 
 This README is user-UI focused: it explains every major screen, what options/buttons you get there, what happens after each action, and the normal flows users follow.
+
+## UI preview
+
+<table>
+  <tr>
+    <td align="center"><img src="github-images/main-screen-1.PNG" alt="MainMenuScreen preview" width="240"><br>`MainMenuScreen`</td>
+    <td align="center"><img src="github-images/map-trace-path-4.PNG" alt="MapViewCanvas trace preview (4)" width="240"><br>`MapViewCanvas` trace (4)</td>
+    <td align="center"><img src="github-images/map-trace-path-3.PNG" alt="MapViewCanvas trace preview (3)" width="240"><br>`MapViewCanvas` trace (3)</td>
+  </tr>
+</table>
 
 ---
 
@@ -17,7 +27,7 @@ This README is user-UI focused: it explains every major screen, what options/but
 
 ## 1) What the app is for
 
-MeshCoreTest lets you:
+MeshCore lets you:
 
 - Connect your phone to a MeshCore node by IP/port over Wi-Fi TCP.
 - Chat in public channels in real time.
@@ -643,7 +653,103 @@ This matrix is a compact verification view: where each screen is opened from, wh
 
 ---
 
-## 4) What happens in the background
+## 4) UI screenshots
+
+All screenshots below are grouped to match the same flow as section `3)` and aligned in a fixed 3-column gallery for consistent viewing.
+
+### 4.1 Main navigation (`3.2`)
+
+<table>
+  <tr>
+    <td align="center"><img src="github-images/main-screen-1.PNG" alt="MainMenuScreen (state 1)" width="260"><br>`MainMenuScreen` (1)</td>
+    <td align="center"><img src="github-images/main-screen-2.PNG" alt="MainMenuScreen (state 2)" width="260"><br>`MainMenuScreen` (2)</td>
+    <td align="center"><img src="github-images/main-screen-3.PNG" alt="MainMenuScreen (state 3)" width="260"><br>`MainMenuScreen` (3)</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="github-images/more-menu.PNG" alt="MoreMenuCanvas" width="260"><br>`MoreMenuCanvas`</td>
+    <td align="center"><img src="github-images/tools.PNG" alt="ToolsScreen" width="260"><br>`ToolsScreen`</td>
+    <td align="center"><img src="github-images/about-screen.PNG" alt="AboutScreen" width="260"><br>`AboutScreen`</td>
+  </tr>
+</table>
+
+### 4.2 Messaging: channels and DMs (`3.3`)
+
+<table>
+  <tr>
+    <td align="center"><img src="github-images/channel-list.PNG" alt="ChannelListScreen" width="260"><br>`ChannelListScreen`</td>
+    <td align="center"><img src="github-images/channel-messages.PNG" alt="ChannelScreen" width="260"><br>`ChannelScreen`</td>
+    <td align="center"><img src="github-images/write-message.PNG" alt="DMScreen (compose)" width="260"><br>`DMScreen` (compose)</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="github-images/contacts-screen-1.PNG" alt="ContactsScreen (state 1)" width="260"><br>`ContactsScreen` (1)</td>
+    <td align="center"><img src="github-images/contacts-screen-2.PNG" alt="ContactsScreen (state 2)" width="260"><br>`ContactsScreen` (2)</td>
+    <td align="center"><img src="github-images/set-path.PNG" alt="PathListScreen" width="260"><br>`PathListScreen`</td>
+  </tr>
+</table>
+
+### 4.3 Add/share flows (`3.4`)
+
+<table>
+  <tr>
+    <td align="center"><img src="github-images/add-contact.PNG" alt="AddContactOptionsScreen" width="260"><br>`AddContactOptionsScreen`</td>
+    <td align="center"><img src="github-images/add-channels.PNG" alt="AddChannelOptionsScreen" width="260"><br>`AddChannelOptionsScreen`</td>
+    <td align="center"><img src="github-images/choose-preset-screen.PNG" alt="MapSourceForm (preset picker)" width="260"><br>`MapSourceForm` (preset)</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="github-images/contact-details.PNG" alt="ContactDetailsScreen" width="260"><br>`ContactDetailsScreen`</td>
+    <td align="center"><img src="github-images/contact-view-on-map.PNG" alt="MapViewCanvas (contact focus 1)" width="260"><br>`MapViewCanvas` (contact 1)</td>
+    <td align="center"><img src="github-images/contact-view-on-map-2.PNG" alt="MapViewCanvas (contact focus 2)" width="260"><br>`MapViewCanvas` (contact 2)</td>
+  </tr>
+</table>
+
+### 4.4 Repeaters and route tools (`3.5`)
+
+<table>
+  <tr>
+    <td align="center"><img src="github-images/repeaters-list.PNG" alt="RepeatersScreen" width="260"><br>`RepeatersScreen`</td>
+    <td align="center"><img src="github-images/repeater-login.PNG" alt="RepeaterLoginScreen" width="260"><br>`RepeaterLoginScreen`</td>
+    <td align="center"><img src="github-images/repeater-logged.PNG" alt="RepeaterLoggedInScreen" width="260"><br>`RepeaterLoggedInScreen`</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="github-images/repeaters-telemetry.PNG" alt="TelemetryResultScreen (repeater)" width="260"><br>`TelemetryResultScreen` (repeater)</td>
+    <td align="center"><img src="github-images/contact-telemetry.PNG" alt="TelemetryResultScreen (contact)" width="260"><br>`TelemetryResultScreen` (contact)</td>
+    <td align="center"><img src="github-images/ping-zero-hop.PNG" alt="PingZeroHopScreen" width="260"><br>`PingZeroHopScreen`</td>
+  </tr>
+</table>
+
+### 4.5 Trace path and map (`3.6`)
+
+<table>
+  <tr>
+    <td align="center"><img src="github-images/map-trace-path.PNG" alt="MapViewCanvas trace mode (1)" width="260"><br>`MapViewCanvas` trace (1)</td>
+    <td align="center"><img src="github-images/map-trace-path-2.PNG" alt="MapViewCanvas trace mode (2)" width="260"><br>`MapViewCanvas` trace (2)</td>
+    <td align="center"><img src="github-images/map-trace-path-3.PNG" alt="MapViewCanvas trace mode (3)" width="260"><br>`MapViewCanvas` trace (3)</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="github-images/map-trace-path-4.PNG" alt="MapViewCanvas trace mode (4)" width="260"><br>`MapViewCanvas` trace (4)</td>
+    <td align="center"><img src="github-images/map-mesure.PNG" alt="MapViewCanvas measure mode (1)" width="260"><br>`MapViewCanvas` measure (1)</td>
+    <td align="center"><img src="github-images/map-mesure-2.PNG" alt="MapViewCanvas measure mode (2)" width="260"><br>`MapViewCanvas` measure (2)</td>
+  </tr>
+</table>
+
+### 4.6 Diagnostics, settings, and info (`3.7`)
+
+<table>
+  <tr>
+    <td align="center"><img src="github-images/noise-floor.PNG" alt="NoiseFloorScreen" width="260"><br>`NoiseFloorScreen`</td>
+    <td align="center"><img src="github-images/activity-log.PNG" alt="ActivityLogScreen" width="260"><br>`ActivityLogScreen`</td>
+    <td align="center"><img src="github-images/device-info-screen.PNG" alt="DeviceInfoScreen" width="260"><br>`DeviceInfoScreen`</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="github-images/settings-screen.PNG" alt="SettingsScreen" width="260"><br>`SettingsScreen`</td>
+    <td align="center"><img src="github-images/map-source.PNG" alt="MapSourceForm" width="260"><br>`MapSourceForm`</td>
+    <td align="center"><img src="github-images/about-screen.PNG" alt="AboutScreen" width="260"><br>`AboutScreen`</td>
+  </tr>
+</table>
+
+---
+
+## 5) What happens in the background
 
 From the user's perspective:
 
@@ -661,7 +767,7 @@ Key background service groups:
 
 ---
 
-## 5) Build and run
+## 6) Build and run
 
 This is a Java ME app — not standard desktop Java.
 
@@ -689,31 +795,16 @@ Tested on **Nokia Asha 210**. Any MIDP 2.0 / CLDC 1.1 handset with Wi-Fi TCP and
 
 ---
 
-## 6) Roadmap TODO
+## 7) Roadmap TODO
 
-### Multibyte path support
-
-- [ ] Define exact multibyte path encoding rules and limits.
-- [ ] Validate manual path input for mixed single/multibyte hops.
-- [ ] Update map-based path builder to support multibyte hop editing.
-- [ ] Keep hop count and byte-length presentation consistent in UI.
-- [ ] Ensure result rendering supports multibyte path metadata.
-- [ ] Add regression checks for run/refresh/auto-return flows.
-
-### Repeater management improvements
-
-- [ ] Unify repeater actions across `RepeatersScreen`, contact actions, and trace screens.
-- [ ] Add consistent repeater status model (last seen, coords available, session/login state).
-- [ ] Improve one-step transitions:
-  - repeater → login
-  - repeater → telemetry
-  - repeater → trace (manual/map pre-filled)
-- [ ] Improve session UX (guest vs authenticated states, explicit logout visibility).
-- [ ] Add clearer repeater action logs in `ActivityLogScreen`.
+- Multibyte path support
+- Repeater management
+- Bug fixes
+- Refactor (where needed)
 
 ---
 
-## 7) Quick troubleshooting
+## 8) Quick troubleshooting
 
 - **Cannot connect:** verify the host/IP and port, and confirm the phone/emulator and node are on the same local network.
 - **No contacts or repeaters visible:** wait for the initial sync to complete and use the `Refresh` action on the relevant screen.
