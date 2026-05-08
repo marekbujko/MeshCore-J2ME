@@ -4,6 +4,13 @@ MeshCore Java ME (MIDP 2.0 / CLDC 1.1) mobile client for MeshCore Companion Radi
 
 This README is user-UI focused: it explains every major screen, what options/buttons you get there, what happens after each action, and the normal flows users follow.
 
+## Get started
+
+- Demo video: [YouTube - MeshCore J2ME: Bringing Mesh network to Old QWERTY Phones](https://youtu.be/3oNSf3yNN1Y)
+
+- Download latest release: [MeshCore J2ME v1.0.0](https://github.com/dobrishinov/MeshCore-J2ME/releases/tag/v1.0.0)
+- Build from source: [Go to Build and run](#6-build-and-run)
+
 ## UI preview
 
 <table>
@@ -22,6 +29,12 @@ This README is user-UI focused: it explains every major screen, what options/but
 - **KEmulator (kemnnx64)** — tested on Windows, Linux, and macOS via the [KEmulator emulator](https://github.com/shinovon/KEmulator/releases). This lets you run the app on a desktop computer without a physical device.
 
 > Any device or emulator supporting **MIDP 2.0 / CLDC 1.1** with TCP networking should work.
+
+<table>
+  <tr>
+    <td colspan="3" align="center"><img src="github-images/nokia-asha-210.jpg" alt="Nokia Asha 210 — primary tested hardware" width="320"><br><strong>Nokia Asha 210</strong> — primary tested device</td>
+  </tr>
+</table>
 
 ---
 
@@ -799,6 +812,7 @@ Tested on **Nokia Asha 210**. Any MIDP 2.0 / CLDC 1.1 handset with Wi-Fi TCP and
 
 - Multibyte path support
 - Repeater management
+- Time Zone configuration
 - Bug fixes
 - Refactor (where needed)
 
