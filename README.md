@@ -27,6 +27,7 @@ This README is user-UI focused: it explains every major screen, what options/but
 
 - **Nokia Asha 210** — primary tested hardware device.
 - **KEmulator (kemnnx64)** — tested on Windows, Linux, and macOS via the [KEmulator emulator](https://github.com/shinovon/KEmulator/releases). This lets you run the app on a desktop computer without a physical device.
+- **J2ME-Loader** — also works on Android using [J2ME-Loader](https://github.com/nikita36078/j2me-loader), a J2ME emulator app (install the JAR/JAD and grant network access as needed).
 
 > Any device or emulator supporting **MIDP 2.0 / CLDC 1.1** with TCP networking should work.
 
